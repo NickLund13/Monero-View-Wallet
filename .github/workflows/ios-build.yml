@@ -144,10 +144,17 @@ jobs:
           # Send the app to the background by opening the Settings app. iOS
           # then saves the app switcher's snapshot of the app, which must be
           # blank: the app covers itself as soon as it stops being active.
+          # On a busy runner that takes more than a few seconds, so wait up to
+          # a minute, until no new snapshot file has appeared for 2 seconds.
           touch "$RUNNER_TEMP/before-background"
           xcrun simctl launch "$udid" com.apple.Preferences || true
-          sleep 5
-          snapshots=$(find "$data/Library" \( -path '*SplashBoard*' -o -path '*Snapshots*' \) -type f -newer "$RUNNER_TEMP/before-background" 2>/dev/null || true)
+          snapshots=
+          for _ in $(seq 30); do
+            sleep 2
+            found=$(find "$data/Library" \( -path '*SplashBoard*' -o -path '*Snapshots*' \) -type f -newer "$RUNNER_TEMP/before-background" 2>/dev/null | sort || true)
+            [ -n "$found" ] && [ "$found" = "$snapshots" ] && break
+            snapshots=$found
+          done
           xcrun simctl terminate "$udid" "$bundle" || true
           # Names only, to show where the app and wallet2 keep their files.
           echo "Files in the app's folder:"
