@@ -38,7 +38,7 @@ on:
         type: boolean
         default: false
   push:
-    branches: [main, claude/project-thread-k436ix] # TEMPORARY: the branch, while the PR is a draft
+    branches: [main]
     paths:
       - android/**
       - lib/**
