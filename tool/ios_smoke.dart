@@ -3,7 +3,8 @@
 // works on iOS, that the wallet is saved in the app's folder with its password
 // in the Keychain and opens again, that the app's native code for key images
 // files and the lock's checks answer, that the Tor inside the app runs and
-// answers on its control port, and that the app draws its first screen.
+// answers on its control port, that the camera's native code answers, and
+// that the app draws its first screen.
 //
 // The library is called with obviously fake input (no real address or key).
 // The saved wallet is a random throwaway made here, as in the app's tests,
@@ -22,6 +23,7 @@ import 'package:monero_view_wallet/keychain.dart';
 import 'package:monero_view_wallet/lock.dart';
 import 'package:monero_view_wallet/main.dart';
 import 'package:monero_view_wallet/pick_file.dart';
+import 'package:monero_view_wallet/scan_screen.dart';
 import 'package:monero_view_wallet/secret_store.dart';
 import 'package:monero_view_wallet/tor.dart';
 import 'package:monero_view_wallet/wallet.dart';
@@ -42,6 +44,7 @@ Future<void> main() async {
   );
   out.writeAsStringSync('lock: ${await _lock()}\n', mode: FileMode.append);
   out.writeAsStringSync('tor: ${await _tor()}\n', mode: FileMode.append);
+  out.writeAsStringSync('camera: ${await _camera()}\n', mode: FileMode.append);
   runApp(const MainApp());
   WidgetsBinding.instance.addPostFrameCallback((_) async {
     out.writeAsStringSync('first frame: ok\n', mode: FileMode.append);
@@ -118,6 +121,20 @@ Future<String> _tor() async {
     return version.first.startsWith('250-version=0.4.9.13')
         ? 'ok'
         : 'unexpected: ${version.first}';
+  } catch (e) {
+    return 'failed: $e';
+  }
+}
+
+/// The camera's native code (ios/Runner/QrCamera.swift) answers, without
+/// asking for the camera, which nobody on the simulator could allow: the app
+/// was just installed, so the question hasn't been asked yet. Stopping a
+/// camera view that doesn't exist does nothing.
+Future<String> _camera() async {
+  try {
+    final status = await IosQrCamera.channel.invokeMethod<String>('status');
+    await IosQrCamera.channel.invokeMethod<void>('stop', -1);
+    return status == 'notDetermined' ? 'ok' : 'unexpected: $status';
   } catch (e) {
     return 'failed: $e';
   }

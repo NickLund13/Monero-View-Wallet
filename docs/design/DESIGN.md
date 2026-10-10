@@ -147,7 +147,9 @@ App open, or back after 1 minute in the background → Lock
 
 Fills the Setup fields from a view-only wallet QR code, so nothing has to be
 retyped. It also brings the GUI's own restore height, which is the height the
-key image file's output order depends on.
+key image file's output order depends on. For wallets that show no such code,
+it reads the primary address and then the private view key, each from a QR
+code of its own.
 
 - Reached only from Setup's "Scan QR code". The camera permission is asked on
   the first tap, never earlier. If it is denied: one line saying the camera
@@ -158,13 +160,18 @@ key image file's output order depends on.
   Spendable Wallet code. It holds your spend key, so this app refuses it."
 - Camera view with corner guides, the same as step 2 of Key images by QR.
   Footer in small print: "Feather Wallet works too: Wallet → View-Only → Show
-  QR."
+  QR." and "Other wallets: scan the primary address, then the private view
+  key on its own."
 - Below the camera: "Hold the View Only Wallet code inside the frame." and
   "The picture stays on this iPhone and is never saved."
 - On a good scan the camera stops and the app returns to Setup with the three
   fields filled, the view key masked and the match check already showing. The
   Scan QR code row then reads "Filled from QR code" with a green check.
   Continue stays a tap, so the person can check the restore height first.
+  An address or a view key on its own fills only its field; the row then
+  reads "Address from QR code" or "View key from QR code", and "Filled from
+  QR code" once both came from codes. Typing over a field takes its part
+  away.
 
 **Codes it accepts** (checked against the wallets' source code, 2026-10-09):
 
@@ -172,12 +179,24 @@ key image file's output order depends on.
 | --- | --- | --- |
 | Monero GUI | Settings → Wallet → Show seed & keys → Export wallet → View Only Wallet | `monero-wallet:<primary address>?view_key=<secret view key>&height=<restore height>` ([source](https://github.com/monero-project/monero-gui/blob/390e744af5c5d593575804ccfc3b06049014fb2f/pages/Keys.qml#L279-L280)) |
 | Feather Wallet | Wallet → View-Only → Show QR | JSON: `{"version":0,"primaryAddress":…,"privateViewKey":…,"restoreHeight":…,"walletName":…}`; the wallet name is ignored ([source](https://github.com/feather-wallet/feather/blob/948773cf13c7486ee230eb67b6bac06b2f94c874/src/dialog/ViewOnlyDialog.cpp#L71-L80)) |
+| Any wallet's receive code | Receive (it must show the primary address, not a subaddress) | The primary address alone, bare or as a `monero:` payment request with only the request's own fields (`tx_amount`, `tx_payment_id`, `recipient_name`, `tx_description`, which are ignored; [source](https://github.com/monero-project/monero/blob/24272e4a3b2e812cc2a569d95b177ecef4b91e46/src/wallet/wallet2.cpp#L15399-L15486)). Fills only the address. |
+| Stack Wallet, and any wallet that shows a key on its own | Stack Wallet: Wallet → Settings → Wallet backup → keys → Selected key: Private View Key | The private view key alone, 64 hex characters. Fills only the view key, once Setup has the primary address to check it against. |
 
 The GUI's Spendable Wallet code is the same URI with `&spend_key=<secret spend
 key>` added, and it is the one selected when the page opens. (For a
 view-only or hardware wallet the GUI shows only the view-only code.) Cake
 Wallet reads both formats and also accepts `monero_wallet:` with an
 underscore, so this app does too.
+
+The other wallets on getmonero.org's downloads page show no view-only wallet
+QR (their source checked 2026-10-10): Cake Wallet / Monero.com's only key QR
+is `monero-wallet:?seed=…`, which always holds the seed; Stack Wallet shows
+single keys as bare QR codes, the spend key among them (its key selector
+opens on the public view key); Monerujo, Unstoppable and Edge show the view
+key as text only. Feather changed its code
+to match ANONERO's in 2023 ([commit](https://github.com/feather-wallet/feather/commit/a131bbc16599d3692aa7fe139b9faac69220f635)),
+so ANONERO's may read too; its source and Monfluo's weren't reachable to
+check. Any of them can still be typed in.
 
 **Checks, in order, all on the phone.** A code is used only if it passes every
 one; otherwise nothing from it is put in any field.
@@ -189,16 +208,21 @@ one; otherwise nothing from it is put in any field.
    in any script, also once `%20` and `+` are decoded (what a seed phrase
    looks like). Checked before any field is read, so not even the address is
    kept.
-2. It must be one of the two formats above, with nothing added: an extra or
+2. It must be one of the formats above, with nothing added: an extra or
    repeated parameter, or a JSON field Feather doesn't write, is refused too.
-   Other codes (a `monero:` payment request, an animated `ur:xmr-…` code, a
-   web link) are refused.
-3. The address must be a primary address for mainnet or stagenet, not a
-   subaddress or integrated address. The view key must be 64
+   Other codes (a payment request with other fields, an animated `ur:xmr-…`
+   code, a web link) are refused.
+3. The address must be a primary address for mainnet or stagenet, not an
+   integrated address; a subaddress, and a testnet primary address
+   (starting with 9 or A), get cards of their own. The view key must be 64
    hex characters and the height a whole number.
 4. The same view key check as typed entry: the public view key derived from
-   the scanned key must match the address. If it doesn't, the key may be a
-   spend key, so it is refused like rule 1.
+   the scanned key must match the address, the code's own or, for a key on
+   its own, the one already on Setup (without one, it is refused and nothing
+   is kept). If it doesn't match, the key may be the spend key, which looks
+   the same on its own, so it is refused like rule 1. If the check can't be
+   made at all, the code is refused too. An address on its own has no key to
+   check; Setup checks it against a typed key as usual.
 
 **When a code is refused**, the camera pauses (guides turn grey) and a card
 below it says why:
@@ -206,29 +230,39 @@ below it says why:
 | Case | Title | Says | Buttons |
 | --- | --- | --- | --- |
 | Spend key or seed in the code | That code holds your spend key | Nothing from it was kept. In the GUI, choose View Only Wallet and scan that code. This app can't send, so it never takes a spend key. | Scan again |
-| Not a view-only wallet code | Not a wallet code | Scan the View Only Wallet code under Export wallet in the Monero GUI, or Feather's View-Only QR. | Scan again · Type it in instead |
+| Not a view-only wallet code | Not a wallet code | Scan the View Only Wallet code under Export wallet in the Monero GUI, or Feather's View-Only QR. From another wallet, scan the primary address, then the private view key. | Scan again · Type it in instead |
 | Wrong network | This is a test network wallet | The address is for testnet. This app watches mainnet and stagenet wallets. | Scan again |
-| Key doesn't match the address | This key isn't this address's view key | Nothing from the code was kept. Scan the View Only Wallet code again. | Scan again · Type it in instead |
+| A subaddress | That's a subaddress | Scan the wallet's primary address, which starts with 4 (5 for a stagenet test wallet). Receive screens often show a subaddress. | Scan again · Type it in instead |
+| A key on its own, and no address on Setup | This key needs its address | Nothing from the code was kept. Scan or type the wallet's primary address first, then scan its private view key. | Scan again · Type it in instead |
+| Key doesn't match the address | This key isn't this address's view key | Nothing from the code was kept. Scan the View Only Wallet code again, or this address's private view key. | Scan again · Type it in instead |
+| The key check couldn't be made | This code couldn't be checked | Nothing from it was kept. Scan it again, or type the wallet in. | Scan again · Type it in instead |
 
 **Privacy.** The camera picture is read on the phone and never saved, sent
 or logged, and the camera stops as soon as a code is accepted or refused. The
 decoded text is held in memory only until the fields are filled; it is never
 written to a file, the clipboard or a log. A view key that came from a QR
 code is stored exactly like a typed one (Keychain only). The scanner decodes
-on the phone with Apple's Vision framework, not with Google ML Kit, whose
-terms say it sends usage metrics to Google. The iOS camera permission text:
-"Scans your view-only wallet and key image QR codes. The picture stays on this
+on the phone with Apple's own AVFoundation (`AVCaptureMetadataOutput`, in
+`ios/Runner/QrCamera.swift`), with no scanning library and not with Google ML
+Kit, whose terms say it sends usage metrics to Google. The iOS camera
+permission text: "Scans your view-only wallet QR code. The picture stays on
+this iPhone." When Key images by QR is built, it becomes "Scans your
+view-only wallet and key image QR codes. The picture stays on this
 iPhone."
 
 The camera frame is near-black in both themes (`#050506` dark, `#1A1B1E`
-light), with grey `#8A8C93` text while the camera is off ("Camera paused"
-after a refusal, "Camera off" when the permission is denied).
+light), with grey `#8A8C93` text while the camera is off ("Checking the
+code…" while rule 4 runs, off the UI thread because it makes a throwaway
+wallet; "Camera paused" after a refusal; "Camera off" when the permission is
+denied).
 
 **Built:** the checks (`lib/wallet_qr.dart`), this screen and Setup's Scan QR
-code row (`lib/scan_screen.dart`), with the camera behind an interface. The
-row shows only where the app has a camera: the iPhone camera itself comes in
-its own change, which needs an iPhone build. The Windows test build has no
-camera, so setup there stays typed.
+code row (`lib/scan_screen.dart`), and the iPhone camera
+(`ios/Runner/QrCamera.swift`): a platform view with a capture session of its
+own, which stops at the first code it reads and is torn down as soon as the
+screen takes the view away. Not yet tried with a real camera, which waits for
+TestFlight. The Windows test build has no camera, so setup there stays
+typed.
 
 ### 2. Choose a node
 
@@ -554,10 +588,12 @@ its limits.
   the wallet library's LGPL-3.0 (decided 2026-10-10: GPL-3.0 with an App
   Store permission). Whether App Store terms and the LGPL fit together at all
   is disputed; see [app-store.md](../app-store.md#the-wallet-librarys-lgpl).
-- Choose a QR library for animated UR display and scanning, also used for the
-  wallet QR at setup (pinned, justified in its PR). On iPhone it must decode
-  with Apple's Vision framework on the phone. mobile_scanner 7.x does that on
-  iOS but uses Google ML Kit on Android, which matters for an Android version.
+- Key images by QR: scanning can reuse the setup camera
+  (`ios/Runner/QrCamera.swift`, AVFoundation, no library), but it still needs
+  a UR decoder and encoder for the animated `xmr-output` and `xmr-keyimage`
+  codes (monero_c's `exportOutputsUR` / `importKeyImagesUR` may cover the
+  payload). An Android version needs its own camera code; mobile_scanner uses
+  Google ML Kit there, which the privacy rules rule out.
 - Confirm by hand that the GUI shows a payment to a subaddress made on the
   phone. The addresses match the GUI's (tested), and New stays inside its
   lookahead.

@@ -154,7 +154,7 @@ jobs:
           (cd "$data" && find . -type f -not -path './SystemData/*' | sort)
 
           failed=
-          if [ "$result" != "$(printf 'wallet library: ok\nkeychain: ok\nsaved wallet: ok\nkey images file: ok\nlock: ok\ntor: ok\nfirst frame: ok\nface id: ok')" ]; then
+          if [ "$result" != "$(printf 'wallet library: ok\nkeychain: ok\nsaved wallet: ok\nkey images file: ok\nlock: ok\ntor: ok\ncamera: ok\nfirst frame: ok\nface id: ok')" ]; then
             echo "::error::The smoke test failed on the iOS simulator."
             xcrun simctl spawn "$udid" log show --last 5m --style compact --predicate 'process == "Runner"' | tail -n 60 || true
             failed=1

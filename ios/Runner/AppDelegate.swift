@@ -24,6 +24,9 @@ import UIKit
     if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "InAppTor") {
       InAppTor.register(with: registrar)
     }
+    if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "QrCamera") {
+      QrCamera.register(with: registrar)
+    }
   }
 }
 

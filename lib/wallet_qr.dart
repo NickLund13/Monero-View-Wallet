@@ -1,17 +1,22 @@
 /// Reading a view-only wallet QR code at setup (docs/design/DESIGN.md, 1a):
-/// the Monero GUI's View Only Wallet code or Feather's View-Only QR. Anything
-/// that carries spend authority is refused whole, before any field is read.
+/// the Monero GUI's View Only Wallet code or Feather's View-Only QR, or, for
+/// wallets that show neither, the primary address and then the private view
+/// key, each on its own. Anything that carries spend authority is refused
+/// whole, before any field is read.
 ///
 /// The decoded text is only ever held in memory. Nothing here logs it or
 /// writes it anywhere.
 library;
 
 import 'dart:convert';
+import 'dart:isolate';
 
 import 'wallet.dart';
 
-/// What a view-only wallet code fills in on Setup.
-typedef WalletQr = ({String address, String viewKey, int restoreHeight});
+/// What a scanned code fills in on Setup: a view-only wallet code fills all
+/// three, an address alone only the address, and a private view key alone
+/// only the view key.
+typedef WalletQr = ({String? address, String? viewKey, int? restoreHeight});
 
 /// Why a scanned code was refused, one card each on Scan wallet QR.
 enum Refusal {
@@ -25,8 +30,18 @@ enum Refusal {
   /// Its address is a testnet one.
   testnet,
 
+  /// Its address is a subaddress, not the wallet's primary address.
+  subaddress,
+
+  /// It is a private key alone, and there is no primary address to check it
+  /// against yet.
+  needsAddress,
+
   /// Its view key isn't the address's view key, so it may be the spend key.
   keyMismatch,
+
+  /// The view key check couldn't be made, so nothing in it was confirmed.
+  unchecked,
 }
 
 class RefusedCode implements Exception {
@@ -39,46 +54,103 @@ class RefusedCode implements Exception {
 /// The wallet in [text], a scanned QR code's text, checked in DESIGN.md's
 /// order: spend authority, the format, the values, and last the view key
 /// against the address with [keysProblem] (ViewWallet.keysProblem's
-/// contract). Throws [RefusedCode] if any check fails, and then nothing from
-/// the code is kept.
-WalletQr readWalletQr(
+/// contract), by default on a helper isolate. A private key alone is checked
+/// against [address], the one Setup already has. Throws [RefusedCode] if any
+/// check fails or can't be made, and then nothing from the code is kept.
+Future<WalletQr> readWalletQr(
   String text, {
-  String? Function({required String address, required String viewKey})
+  String? address,
+  Future<String?> Function({required String address, required String viewKey})
       keysProblem =
-      ViewWallet.keysProblem,
-}) {
+      _keysProblemOffUi,
+}) async {
   // 1. Spend authority.
   if (_carriesSpendAuthority(text)) throw RefusedCode(Refusal.spendKey);
 
-  // 2. One of the two formats.
+  // 2. One of the formats.
+  final trimmed = text.trim();
+  if (_viewKeyPattern.hasMatch(trimmed)) {
+    // A private key alone, as Stack Wallet shows each key: only the address
+    // tells the view key from the spend key, so there must be one.
+    if (address == null) throw RefusedCode(Refusal.needsAddress);
+    try {
+      _checkAddress(address);
+    } on RefusedCode {
+      throw RefusedCode(Refusal.needsAddress);
+    }
+    final problem = await _keyProblem(keysProblem, address, trimmed);
+    if (problem == 'failed to parse address') {
+      throw RefusedCode(Refusal.needsAddress);
+    }
+    if (problem != null) throw RefusedCode(Refusal.keyMismatch);
+    return (address: null, viewKey: trimmed, restoreHeight: null);
+  }
+  if (_addressAlone(trimmed) case final alone?) {
+    _checkAddress(alone);
+    return (address: alone, viewKey: null, restoreHeight: null);
+  }
   final fields = _guiFields(text) ?? _featherFields(text);
   if (fields == null) throw RefusedCode(Refusal.notWalletCode);
-  final (:address, :viewKey, :height) = fields;
+  final (address: codeAddress, :viewKey, :height) = fields;
 
   // 3. A primary address of a network the app watches, a view key that can be
   // one, and a whole number for the height.
-  if (!_addressPattern.hasMatch(address)) {
-    throw RefusedCode(Refusal.notWalletCode);
-  }
-  // Testnet primary addresses start with 9.
-  if (address.startsWith('9')) throw RefusedCode(Refusal.testnet);
-  final network = networkOf(address);
-  if (network == null ||
-      !_viewKeyPattern.hasMatch(viewKey) ||
-      height == null ||
-      height < 0) {
+  _checkAddress(codeAddress);
+  if (!_viewKeyPattern.hasMatch(viewKey) || height == null || height < 0) {
     throw RefusedCode(Refusal.notWalletCode);
   }
 
   // 4. The view key against the address: a key that isn't this address's
   // view key may be the spend key.
-  final problem = keysProblem(address: address, viewKey: viewKey);
+  final problem = await _keyProblem(keysProblem, codeAddress, viewKey);
   if (problem == 'failed to parse address') {
     throw RefusedCode(Refusal.notWalletCode);
   }
   if (problem != null) throw RefusedCode(Refusal.keyMismatch);
-  return (address: address, viewKey: viewKey, restoreHeight: height);
+  return (address: codeAddress, viewKey: viewKey, restoreHeight: height);
 }
+
+/// Throws [RefusedCode] unless [address] can be a primary address of a
+/// network the app watches.
+void _checkAddress(String address) {
+  if (!_addressPattern.hasMatch(address)) {
+    throw RefusedCode(Refusal.notWalletCode);
+  }
+  // Testnet primary addresses start with 9 or A: prefix 53 in base58.
+  if (address.startsWith('9') || address.startsWith('A')) {
+    throw RefusedCode(Refusal.testnet);
+  }
+  // Subaddresses start with 8 on mainnet and 7 on stagenet.
+  if (address.startsWith('8') || address.startsWith('7')) {
+    throw RefusedCode(Refusal.subaddress);
+  }
+  if (networkOf(address) == null) throw RefusedCode(Refusal.notWalletCode);
+}
+
+/// [keysProblem]'s answer for [viewKey] and [address]. A check that can't be
+/// made accepts nothing.
+Future<String?> _keyProblem(
+  Future<String?> Function({required String address, required String viewKey})
+  keysProblem,
+  String address,
+  String viewKey,
+) async {
+  try {
+    return await keysProblem(address: address, viewKey: viewKey);
+  } catch (_) {
+    throw RefusedCode(Refusal.unchecked);
+  }
+}
+
+/// ViewWallet.keysProblem off the UI isolate: the wallet it checks with takes
+/// a third of a second to make, which would stall the screen. That wallet is
+/// in memory only and dropped on the helper isolate.
+Future<String?> _keysProblemOffUi({
+  required String address,
+  required String viewKey,
+}) => Isolate.run(
+  () => ViewWallet.keysProblem(address: address, viewKey: viewKey),
+);
 
 final _addressPattern = RegExp(r'^[1-9A-HJ-NP-Za-km-z]{95}$');
 final _viewKeyPattern = RegExp(r'^[0-9a-fA-F]{64}$');
@@ -178,6 +250,37 @@ _Fields? _guiFields(String text) {
 }
 
 final _digits = RegExp(r'^[0-9]+$');
+
+/// An address on its own, as receive screens show it: bare, or in a
+/// `monero:` payment request with only the request's own fields
+/// (wallet2::parse_uri: tx_amount, tx_payment_id, recipient_name and
+/// tx_description), which are ignored.
+String? _addressAlone(String text) {
+  if (_addressPattern.hasMatch(text)) return text;
+  final match = RegExp(
+    r'^monero:([^?#]*)(?:\?([^#]*))?$',
+    caseSensitive: false,
+  ).firstMatch(text);
+  if (match == null) return null;
+  final query = match[2];
+  if (query != null) {
+    final seen = <String>{};
+    for (final part in query.split('&')) {
+      final equals = part.indexOf('=');
+      if (equals < 0) return null;
+      final name = _decoded(part.substring(0, equals));
+      if (!_paymentFields.contains(name) || !seen.add(name)) return null;
+    }
+  }
+  return match[1]!;
+}
+
+const _paymentFields = {
+  'tx_amount',
+  'tx_payment_id',
+  'recipient_name',
+  'tx_description',
+};
 
 /// Feather Wallet's View-Only QR: compact JSON with version 0, the primary
 /// address, the private view key, the restore height and the wallet's name,

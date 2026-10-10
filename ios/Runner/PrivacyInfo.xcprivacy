@@ -8,8 +8,13 @@
   (tool/fetch_monero_c.sh writes it), and Flutter.framework ships Flutter's.
 
   The app tracks nobody and collects nothing: it sends nothing to its
-  developer, only talks to the node the user picks and, if the user turns it
-  on, asks Kraken for the XMR price with no wallet data (SECURITY.md rule 5).
+  developer. It talks only to the node the user picks, to the listed nodes
+  when the user presses Test speed (asking each one its block height and
+  nothing else), and, if the user turns it on, to Kraken for the XMR price,
+  with no wallet data. With Connect over Tor on, all of it goes through the
+  Tor network's relays, which Tor finds through its directory servers
+  (SECURITY.md rule 5). Scan QR code reads the camera picture on the iPhone
+  and never saves or sends it.
 
   Required reason APIs, which Tor and the libraries in it call (the Swift code
   calls none of them):

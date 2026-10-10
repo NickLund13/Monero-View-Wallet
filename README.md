@@ -15,6 +15,14 @@ wallet:
    the address. It refuses and wipes a seed phrase, and any key that is not
    that address's view key (which is what a spend key looks like).
    Subaddresses are refused: watch the primary address.
+   On an iPhone, **Scan QR code** fills all three from the Monero GUI's View
+   Only Wallet code (Settings → Wallet → Show seed & keys → Export wallet) or
+   Feather's View-Only QR. From other wallets it reads the primary address
+   and then the private view key, each from a code of its own; a key on its
+   own is checked against the address and refused unless it is the view key.
+   Any code that holds a spend key or seed is refused whole, as is the GUI's
+   Spendable Wallet code. The camera reads the code on the phone and the
+   picture is never saved.
 2. **Choose a node:** your own (with a Test button), or one from a short list
    of public nodes on the wallet's network, to which **Add another node** adds
    your own picks; the app keeps them with the wallet. **Test speed** asks each
@@ -154,8 +162,7 @@ minutes of scanning at most. **Remove wallet** deletes the password, then both w
 files. A wallet whose setup stopped before "Start sync" is deleted at the next
 launch, and setup starts over.
 
-Not built yet: setup by scanning the GUI's view-only wallet QR code, the rest
-of Settings and key images by QR.
+Not built yet: the rest of Settings and key images by QR.
 
 Needs [Flutter](https://docs.flutter.dev/get-started/install/windows/desktop)
 3.47.6 and Visual Studio with the "Desktop development with C++" workload.
@@ -224,7 +231,8 @@ control port as tor 0.4.9.13. It keeps Tor off the network, so the test
 contacts nothing. The Files picker, "Open in…" and AirDrop themselves need a person
 to tap through, so they wait for TestFlight to be tried on a phone.
 
-Not on iPhone yet: the camera.
+The smoke test also checks that the camera's native code answers. Scanning
+itself needs a real camera, so it waits for TestFlight too.
 
 What App Store Connect will ask when the app is submitted (encryption export,
 App Privacy, privacy manifests, the wallet library's license) is in
