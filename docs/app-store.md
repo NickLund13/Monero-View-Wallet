@@ -5,9 +5,8 @@ already has in place. Written on 2026-10-09; Apple's forms change wording
 over time, so answer the substance. None of this is legal advice.
 
 Still to do before submitting: the real bundle id (now the
-`com.example.moneroViewWallet` placeholder), signing, a public web address
-for the privacy policy (see [App Privacy](#app-privacy)), and the app's source
-public on GitHub (see [The wallet library's LGPL](#the-wallet-librarys-lgpl)).
+`com.example.moneroViewWallet` placeholder), signing, and GitHub Pages turned
+on for the privacy policy and support page (see [App Privacy](#app-privacy)).
 
 ## Export compliance (encryption)
 
@@ -70,8 +69,11 @@ what the code does. Apple asks for a link to it in App Store Connect and for it
 in the app, easy to find (App Review Guideline 5.1.1(i)). The app shows the
 same text, built into the app so reading it contacts nothing, under Settings →
 About → Privacy policy and from a link on Setup; a test checks the two copies
-match. Still to do: put the file on a public web page and give App Store
-Connect that address. Keep the policy in step with the app: a change to what
+match. GitHub Pages publishes it with a short home page from `docs/`
+(`_config.yml` keeps the rest of the folder out), once it is turned on under
+Settings → Pages (deploy from the main branch, `/docs`). App Store Connect then
+gets https://nicklund13.github.io/Monero-View-Wallet/privacy-policy.html as the Privacy Policy URL and https://nicklund13.github.io/Monero-View-Wallet/ as the
+Support URL. Keep the policy in step with the app: a change to what
 the app keeps or sends changes the policy in the same pull request (the PR
 checklist asks).
 
@@ -122,8 +124,8 @@ it for this app and for versions others make of it, as long as the source of
 each version offered there is public under the same terms, and contributions
 come in under it (CONTRIBUTING.md). The app shows its copyright and license at
 the top of Settings → Open-source licenses, as the GPL asks of an app with a
-screen. The repository has to be public, with the source of the version
-submitted, before the app goes on the App Store.
+screen. The repository is public
+since 2026-10-10; each version submitted must have its source there.
 
 ## Name and icon
 

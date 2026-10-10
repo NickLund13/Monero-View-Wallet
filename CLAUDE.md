@@ -60,6 +60,14 @@ for every change; read them before writing code:
   build and the Stagenet tests have no cloud stand-in, so a change that needs
   one of them (below) still waits for it. Once GitHub runs jobs again, its
   checks are the gate again.
+- Until the `CLAUDE_CODE_OAUTH_TOKEN` secret is set in this repository (a
+  one-time step for the owner, pending since the repository went public on
+  2026-10-10), the Claude review job fails at its first step. Until then a PR
+  merges when the Security checks and App tests are green on GitHub and a
+  stand-in review as above, from a separate Claude session and posted from
+  the repository owner's account, has passed on its head commit. The
+  repository is public, so a "Claude review" comment from any other account
+  doesn't count. Once the secret is set, the review job is the gate again.
 - App tests runs `flutter analyze` and every test that needs no network, on
   Linux. Run the same before pushing app code (README.md says how). The
   stagenet node tests run in the Stagenet tests workflow instead, by hand only
