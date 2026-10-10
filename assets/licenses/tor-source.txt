@@ -1,7 +1,7 @@
-The Windows app runs tor.exe from the Tor Project's Tor Expert Bundle 15.0.24, unchanged. The Tor Project builds it with Tor's optional GPL-licensed code, so this tor.exe as a whole is covered by the GNU General Public License, version 3. Its text is listed with Tor. The app runs tor.exe as a separate program and talks to it over a connection on this computer.
+The Windows and Android apps run tor from the Tor Project's Tor Expert Bundle 15.0.24, unchanged: tor.exe on Windows, and on Android the bundle's libTor.so for each kind of processor, installed with the app as libtor.so. The Tor Project builds it with Tor's optional GPL-licensed code, so this tor as a whole is covered by the GNU General Public License, version 3. Its text is listed with Tor. The app runs tor as a separate program and talks to it over a connection on the same device.
 
-The source code of this tor.exe:
+The source code of this tor:
 
 Tor 0.4.9.13: https://archive.torproject.org/tor-package-archive/tor-0.4.9.13.tar.gz
 
-The Tor Project's build recipe for Tor Browser 15.0.24, which fetches the source of every library built into tor.exe (OpenSSL 3.5.8, libevent 2.1.13 and zlib 1.3.2): https://gitlab.torproject.org/tpo/applications/tor-browser-build
+The Tor Project's build recipe for Tor Browser 15.0.24, which fetches the source of every library built into tor (OpenSSL 3.5.8, libevent 2.1.13 and zlib 1.3.2, and on Android also Zstandard 1.5.7): https://gitlab.torproject.org/tpo/applications/tor-browser-build

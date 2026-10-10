@@ -46,9 +46,15 @@ fi
 # test then shows Scan wallet QR, and the camera must be on while it shows
 # and off again once it has gone.
 adb shell pm grant "$package" android.permission.CAMERA
+# How many of the emulator's cameras the app has open now: for each open
+# camera, Android's camera service names the package that opened it.
 camera_clients() {
+  adb shell dumpsys media.camera | grep -A4 'is open. Client instance dump' |
+    grep -c "Client package: $package" || true
+}
+camera_state() {
   adb shell dumpsys media.camera |
-    sed -n '/Active Camera Clients:/,/^\]/p' | grep -c "$package" || true
+    grep -E 'is open|is closed|Client package' || true
 }
 # Waits up to 4 minutes for a line of the smoke test's report.
 reported() {
@@ -66,7 +72,7 @@ if reported 'camera view: shown'; then
   done
   if [ -z "$on" ]; then
     echo "::error::The camera didn't turn on for Scan wallet QR."
-    adb shell dumpsys media.camera | sed -n '/Active Camera Clients:/,/^\]/p' || true
+    camera_state
     failed=1
   fi
   # Temporary, while the camera is new: the screen, to check how the picture
@@ -75,6 +81,8 @@ if reported 'camera view: shown'; then
   echo "screenshot, gzipped, in base64:"
   gzip -9c "${RUNNER_TEMP:-/tmp}/scan.png" | base64 -w 0 || true
   echo
+  echo "camera state while shown:"
+  camera_state
 fi
 if reported 'camera view: gone'; then
   off=
@@ -84,6 +92,7 @@ if reported 'camera view: gone'; then
   done
   if [ -z "$off" ]; then
     echo "::error::The camera stayed on after Scan wallet QR went."
+    camera_state
     failed=1
   fi
 fi

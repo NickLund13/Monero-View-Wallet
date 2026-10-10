@@ -42,7 +42,7 @@ processor).
 | `utf8proc.txt` | utf8proc | 2.9.0 | MIT and the Unicode data license | [LICENSE.md](https://raw.githubusercontent.com/JuliaStrings/utf8proc/3de4596fbe28956855df2ecb3c11c0bbc3535838/LICENSE.md) |
 | `bc-ur.txt` | bc-ur (MrCyjaneK's fork, for animated QR codes), and the app's own reader of those codes (`lib/ur.dart`), ported from its decoder | d82e7c75 | BSD-2-Clause-Patent, with BSD-3-Clause, MIT and CC0 parts | [LICENSE](https://raw.githubusercontent.com/MrCyjaneK/bc-ur/d82e7c753e710b8000706dc3383b498438795208/LICENSE) |
 | `boost.txt` | Boost | 1.90.0 | BSL-1.0 | [LICENSE_1_0.txt](https://raw.githubusercontent.com/boostorg/boost/boost-1.90.0/LICENSE_1_0.txt) |
-| `openssl.txt` | OpenSSL (also inside Tor) | 3.5.1 here, 3.6.4 in the iPhone Tor, 3.5.8 in the Windows Tor | Apache-2.0 | [LICENSE.txt](https://raw.githubusercontent.com/openssl/openssl/openssl-3.5.1/LICENSE.txt) |
+| `openssl.txt` | OpenSSL (also inside Tor) | 3.5.1 here, 3.6.4 in the iPhone Tor, 3.5.8 in the Windows and Android Tor | Apache-2.0 | [LICENSE.txt](https://raw.githubusercontent.com/openssl/openssl/openssl-3.5.1/LICENSE.txt) |
 | `libsodium.txt` | libsodium | 1.0.18 (from the build recipe; the binary has no version string) | ISC | [LICENSE](https://raw.githubusercontent.com/jedisct1/libsodium/1.0.18/LICENSE) |
 | `unbound.txt` | Unbound | 1.23.0 | BSD-3-Clause and ISC | [LICENSE](https://raw.githubusercontent.com/NLnetLabs/unbound/release-1.23.0/LICENSE) |
 | `protobuf.txt` | Protocol Buffers runtime | 3.6.1 | BSD-3-Clause | [LICENSE](https://raw.githubusercontent.com/protocolbuffers/protobuf/v3.6.1/LICENSE) |
@@ -74,7 +74,7 @@ ZeroMQ, expat, zlib, libiconv, ICU, liblzma, zstd, hidapi, libusb, miniupnpc.
 | `liblzma.txt` | liblzma (XZ Utils) | 5.8.4 | 0BSD | iPhone | [COPYING.0BSD](https://raw.githubusercontent.com/tukaani-project/xz/v5.8.4/COPYING.0BSD) |
 | `tor-framework.txt` | Tor.framework, which built the iPhone's Tor | 409.13.1 | MIT | iPhone | [LICENSE](https://raw.githubusercontent.com/iCepa/Tor.framework/v409.13.1/LICENSE) |
 | `zlib.txt` | zlib | 1.3.2 | Zlib | Windows and Android | [LICENSE](https://raw.githubusercontent.com/madler/zlib/v1.3.2/LICENSE) |
-| `zstd.txt` | Zstandard | ZSTD_VERSION | BSD-3-Clause (offered with GPL-2.0 as the other choice) | Android | [LICENSE](https://raw.githubusercontent.com/facebook/zstd/vZSTD_VERSION/LICENSE) |
+| `zstd.txt` | Zstandard | 1.5.7 | BSD-3-Clause (offered with GPL-2.0 as the other choice) | Android | [LICENSE](https://raw.githubusercontent.com/facebook/zstd/v1.5.7/LICENSE) |
 
 The iPhone's Tor is built without Tor's GPL option, so its LGPL proof-of-work
 code is not in it. The Windows `tor.exe` and the Android tor are the Tor

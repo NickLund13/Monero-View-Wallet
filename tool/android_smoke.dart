@@ -95,7 +95,9 @@ Future<String> _tor() async {
     }
     final version = await Process.run(program, ['--version']);
     final out = '${version.stdout}';
-    return out.startsWith('Tor version 0.4.9.13.')
+    // "Tor version 0.4.9.13 (git-…)." on Android, without the git part
+    // elsewhere.
+    return out.startsWith(RegExp(r'Tor version 0\.4\.9\.13[ .]'))
         ? 'ok'
         : 'unexpected: ${out.split('\n').first}';
   } catch (e) {
