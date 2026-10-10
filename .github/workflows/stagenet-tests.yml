@@ -5,11 +5,11 @@
 # in memory during the run, on Monero's stagenet test network, so no real
 # wallet is involved.
 #
-# This is not a pull request check: public stagenet nodes go down now and
-# then, which would block merges for reasons outside the code. It runs by hand
-# (Actions > Stagenet tests > Run workflow): run it on a branch to try it
-# before merging. The nightly run, whose failures showed as red runs in the
-# Actions tab, is paused while the free Actions minutes are short (see on:).
+# It is not a check on every pull request: public stagenet nodes go down now
+# and then, which would block merges for reasons outside the code. It runs
+# every night, where a failure shows as a red run in the Actions tab, and on a
+# pull request that changes this workflow. Start it by hand (Actions >
+# Stagenet tests > Run workflow) to try a branch before merging.
 #
 # The spend test (test/stagenet_spend_test.dart) stays skipped here: it takes
 # coins from a public faucet and about an hour, so it is a manual run on a PC.
@@ -22,14 +22,11 @@ name: Stagenet tests
 
 on:
   workflow_dispatch:
-  # Paused 2026-10-10 while the free Actions minutes are short: the nightly run
-  # and the run on a pull request that changes this workflow. Uncomment these
-  # lines to turn them back on.
-  # schedule:
-  #   - cron: "23 7 * * *" # every night
-  # pull_request:
-  #   paths:
-  #     - .github/workflows/stagenet-tests.yml
+  schedule:
+    - cron: "23 7 * * *" # every night
+  pull_request:
+    paths:
+      - .github/workflows/stagenet-tests.yml
 
 permissions:
   contents: read

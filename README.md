@@ -67,9 +67,9 @@ on, Kraken sees your IP address too, but nothing about the wallet.
 ### Tor
 
 **Experimental.** Built-in Tor is new in this app and has had little testing:
-runs against the real Tor network in the Stagenet tests workflow, which is
-started by hand while its nightly run is paused, and no review by anyone
-outside this project. Don't rely on it yet to hide your IP address.
+runs against the real Tor network in the nightly Stagenet tests workflow, and
+no review by anyone outside this project. Don't rely on it yet to hide your IP
+address.
 
 The Windows build ships the Tor Project's own `tor.exe` (tor 0.4.9.13, from
 Tor Expert Bundle 15.0.24) next to the app. With Connect over Tor on, the app
@@ -186,11 +186,10 @@ LD_LIBRARY_PATH="$PWD/windows/monero_c" flutter test
 ```
 
 The stagenet node tests run in the Stagenet tests workflow instead, against a
-public stagenet node, by hand (Actions > Stagenet tests > Run workflow): its
-nightly run is paused while the free Actions minutes are short. It then checks
-that every public node the app offers, mainnet and stagenet, still answers on
-its network, synced, over TLS or Tor. The Windows build and the hour-long spend
-test run on the PC.
+public stagenet node, every night and when started by hand (Actions > Stagenet
+tests > Run workflow). It then checks that every public node the app offers,
+mainnet and stagenet, still answers on its network, synced, over TLS or Tor.
+The Windows build and the hour-long spend test run on the PC.
 
 The tests save their throwaway wallets in a temporary folder and delete them.
 On Windows each wallet's password goes into Credential Manager under a name of
@@ -212,10 +211,9 @@ The app builds for iPhone, but can't go on a phone until it is signed with an
 Apple developer account (then through TestFlight). Until then the iOS build
 workflow (Actions > iOS build > Run workflow) builds it unsigned on a GitHub
 Mac and runs a smoke test on the iOS simulator: the wallet library loads and
-runs there, and the app shows its first screen. Mac minutes are scarce, so it
-is not a pull request check: it runs by hand. Its runs after a push to main
-that changes the iOS project or the wallet library are paused while the free
-Actions minutes are short.
+runs there, and the app shows its first screen. It runs by itself on pull
+requests that are ready for review and after a push to main, when they change
+the iOS project, the wallet library or the scripts that fetch it.
 
 The smoke test also saves a throwaway wallet with its password in the
 Keychain, opens it again and removes it, and asks the lock's Face ID and
