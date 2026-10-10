@@ -14,6 +14,7 @@
 		4D4F4E45524F000000000003 /* MoneroWallet.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 4D4F4E45524F000000000001 /* MoneroWallet.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		4D4F4E45524F000000000005 /* KeyImagesFile.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4D4F4E45524F000000000004 /* KeyImagesFile.swift */; };
 		4D4F4E45524F000000000007 /* InAppTor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4D4F4E45524F000000000006 /* InAppTor.swift */; };
+		4D4F4E45524F00000000000F /* QrCamera.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4D4F4E45524F00000000000E /* QrCamera.swift */; };
 		4D4F4E45524F000000000009 /* tor.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 4D4F4E45524F000000000008 /* tor.xcframework */; };
 		4D4F4E45524F00000000000B /* libz.tbd in Frameworks */ = {isa = PBXBuildFile; fileRef = 4D4F4E45524F00000000000A /* libz.tbd */; };
 		4D4F4E45524F00000000000D /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 4D4F4E45524F00000000000C /* PrivacyInfo.xcprivacy */; };
@@ -58,6 +59,7 @@
 		4D4F4E45524F000000000004 /* KeyImagesFile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyImagesFile.swift; sourceTree = "<group>"; };
 		4D4F4E45524F000000000001 /* MoneroWallet.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; path = MoneroWallet.xcframework; sourceTree = "<group>"; };
 		4D4F4E45524F000000000006 /* InAppTor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InAppTor.swift; sourceTree = "<group>"; };
+		4D4F4E45524F00000000000E /* QrCamera.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QrCamera.swift; sourceTree = "<group>"; };
 		4D4F4E45524F000000000008 /* tor.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; path = tor.xcframework; sourceTree = "<group>"; };
 		4D4F4E45524F00000000000A /* libz.tbd */ = {isa = PBXFileReference; lastKnownFileType = "sourcecode.text-based-dylib-definition"; name = libz.tbd; path = usr/lib/libz.tbd; sourceTree = SDKROOT; };
 		4D4F4E45524F00000000000C /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
@@ -146,6 +148,7 @@
 				7884E8672EC3CC0400C636F2 /* SceneDelegate.swift */,
 				4D4F4E45524F000000000004 /* KeyImagesFile.swift */,
 				4D4F4E45524F000000000006 /* InAppTor.swift */,
+				4D4F4E45524F00000000000E /* QrCamera.swift */,
 				74858FAD1ED2DC5600515810 /* Runner-Bridging-Header.h */,
 			);
 			path = Runner;
@@ -310,6 +313,7 @@
 				7884E8682EC3CC0700C636F2 /* SceneDelegate.swift in Sources */,
 				4D4F4E45524F000000000005 /* KeyImagesFile.swift in Sources */,
 				4D4F4E45524F000000000007 /* InAppTor.swift in Sources */,
+				4D4F4E45524F00000000000F /* QrCamera.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

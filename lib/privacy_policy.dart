@@ -38,6 +38,8 @@ The wallet's files, the display choices and the ring database are kept out of iC
 
 Face ID and the iPhone's passcode are checked by iOS. The app only learns whether the check passed, never your face or your passcode.
 
+Scan QR code, at setup, uses the iPhone's camera once you allow it. The picture is read on the iPhone to find the code and is never saved or sent, and the camera turns off as soon as a code is read. A code that holds a spend key or seed is refused and nothing from it is kept. The address, view key or restore height a good code holds go into the setup fields, as if you had typed them.
+
 ## What the app sends, and to whom
 
 The app connects to nothing except what this section lists. It never sends your secret view key anywhere, and sends nothing to the developer.

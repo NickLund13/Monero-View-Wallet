@@ -13,6 +13,7 @@ import 'licenses.dart';
 import 'lock.dart';
 import 'pick_file.dart';
 import 'price.dart';
+import 'scan_screen.dart';
 import 'secret_store.dart';
 import 'session.dart';
 import 'setup_screen.dart';
@@ -37,6 +38,8 @@ Future<void> main() async {
       : (WalletSession(wallet)..startPolling());
   // Locked from the first frame, so the balance never shows before Face ID.
   await appLock.start(on: session?.lockOn ?? false);
+  // Setup can scan the wallet's QR code with the iPhone's camera.
+  if (Platform.isIOS) qrCamera = IosQrCamera();
   runApp(
     MainApp(
       home: session == null

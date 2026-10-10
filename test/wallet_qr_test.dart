@@ -1,5 +1,5 @@
-// Reading a view-only wallet QR code at setup (lib/wallet_qr.dart) and the
-// Scan wallet QR screen. The screen tests need the native library: run
+// Reading a view-only wallet QR code, or an address or view key alone, at
+// setup (lib/wallet_qr.dart) and the Scan wallet QR screen. The screen tests need the native library: run
 // `sh tool/fetch_monero_c.sh` first.
 //
 // No code here holds a real wallet. The format tests use made-up values (an
@@ -7,10 +7,12 @@
 // view key check. The screen tests use random throwaway wallets made when the
 // test runs, whose keys are never printed or written into this file.
 
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 // ignore_for_file: implementation_imports
 import 'package:monero/src/monero.dart';
@@ -41,9 +43,10 @@ void main() {
   // records what it was asked and answers [keyAnswer].
   late List<String> checked;
   String? keyAnswer;
-  WalletQr read(String text) => readWalletQr(
+  Future<WalletQr> read(String text, {String? address}) => readWalletQr(
     text,
-    keysProblem: ({required address, required viewKey}) {
+    address: address,
+    keysProblem: ({required address, required viewKey}) async {
       checked.add(address);
       return keyAnswer;
     },
@@ -52,50 +55,53 @@ void main() {
     checked = [];
     keyAnswer = null;
   });
-  Refusal? refusal(String text) {
+  Future<Refusal?> refusal(String text, {String? address}) async {
     try {
-      read(text);
+      await read(text, address: address);
       return null;
     } on RefusedCode catch (e) {
       return e.reason;
     }
   }
 
-  test("reads the Monero GUI's View Only Wallet code", () {
-    expect(read(gui(mainnet)), (
+  test("reads the Monero GUI's View Only Wallet code", () async {
+    expect(await read(gui(mainnet)), (
       address: mainnet,
       viewKey: zeros,
       restoreHeight: 1234,
     ));
     expect(checked, [mainnet]);
-    expect(read(gui(stagenet)).address, stagenet);
+    expect((await read(gui(stagenet))).address, stagenet);
     // Cake Wallet's spelling, and a scheme a QR reader gave in capitals.
-    expect(read('monero_wallet:$mainnet?view_key=$zeros&height=0'), (
+    expect(await read('monero_wallet:$mainnet?view_key=$zeros&height=0'), (
       address: mainnet,
       viewKey: zeros,
       restoreHeight: 0,
     ));
-    expect(read(' MONERO-WALLET:$mainnet?height=7&view_key=$zeros\n'), (
+    expect(await read(' MONERO-WALLET:$mainnet?height=7&view_key=$zeros\n'), (
       address: mainnet,
       viewKey: zeros,
       restoreHeight: 7,
     ));
   });
 
-  test("reads Feather's View-Only QR and ignores the wallet's name", () {
-    expect(read(feather({})), (
+  test("reads Feather's View-Only QR and ignores the wallet's name", () async {
+    expect(await read(feather({})), (
       address: mainnet,
       viewKey: zeros,
       restoreHeight: 1234,
     ));
-    expect(read(feather({'restoreHeight': '99'})).restoreHeight, 99);
-    expect(read(feather({'walletName': words(5)})).address, mainnet);
-    expect(read(feather({'primaryAddress': stagenet})).address, stagenet);
+    expect((await read(feather({'restoreHeight': '99'}))).restoreHeight, 99);
+    expect((await read(feather({'walletName': words(5)}))).address, mainnet);
+    expect(
+      (await read(feather({'primaryAddress': stagenet}))).address,
+      stagenet,
+    );
   });
 
   test(
     'refuses whole anything with a spend key or seed, before reading it',
-    () {
+    () async {
       for (final code in [
         // The GUI's Spendable Wallet code.
         gui(mainnet, query: 'view_key=$zeros&height=1&spend_key=$zeros'),
@@ -126,20 +132,25 @@ void main() {
           query: 'view_key=$zeros&height=1&note=${words(13, '%20')}',
         ),
       ]) {
-        expect(refusal(code), Refusal.spendKey, reason: code);
+        expect(await refusal(code), Refusal.spendKey, reason: code);
       }
       // Not even the view key check saw the address.
       expect(checked, isEmpty);
     },
   );
 
-  test('refuses every other code', () {
+  test('refuses every other code', () async {
     for (final code in [
       '',
       'hello',
       words(11),
-      // A payment request, an animated key images code, a link.
-      'monero:$mainnet?tx_amount=1.5',
+      // A payment request with a field it doesn't have, an animated key
+      // images code, a link.
+      'monero:$mainnet?amount=1.5',
+      'monero:$mainnet?tx_amount=1&tx_amount=2',
+      'monero:$mainnet?tx_amount',
+      'monero:$mainnet?',
+      'monero:',
       'ur:xmr-output/1-3/lpadaxcsencylobemohsgmoyadhdeynteelblrcygldwvarflojtcywlspdkfmzm',
       'https://example.com/?view_key=$zeros',
       // The GUI's code with a value missing, changed or added.
@@ -167,37 +178,131 @@ void main() {
       feather({'other': 1}),
       jsonEncode([feather({})]),
       '{"version":0,',
-      // Subaddresses, integrated addresses, and no address at all.
-      gui('8${'1' * 94}'),
-      gui('7${'1' * 94}'),
+      // Integrated addresses, and no address at all.
       gui('4${'1' * 105}'),
       gui('5${'1' * 105}'),
       gui('4${'1' * 93}0'),
       gui(''),
-      feather({'primaryAddress': '8${'1' * 94}'}),
+      '4${'1' * 105}',
+      'monero:4${'1' * 105}',
+      // Hex that isn't 64 characters.
+      '0' * 63,
+      '0' * 65,
     ]) {
-      expect(refusal(code), Refusal.notWalletCode, reason: code);
+      expect(await refusal(code), Refusal.notWalletCode, reason: code);
     }
     expect(checked, isEmpty);
   });
 
-  test('refuses a testnet wallet', () {
-    expect(refusal(gui('9${'1' * 94}')), Refusal.testnet);
+  test('refuses a testnet wallet', () async {
+    // Testnet's prefix starts an address with 9, or about one time in five
+    // with A.
+    expect(await refusal(gui('9${'1' * 94}')), Refusal.testnet);
+    expect(await refusal(gui('A${'1' * 94}')), Refusal.testnet);
     expect(
-      refusal(feather({'primaryAddress': '9${'1' * 94}'})),
+      await refusal(feather({'primaryAddress': '9${'1' * 94}'})),
       Refusal.testnet,
     );
+    expect(await refusal('9${'1' * 94}'), Refusal.testnet);
+    // Its subaddresses start with B or C.
+    expect(await refusal(gui('B${'1' * 94}')), Refusal.notWalletCode);
     expect(checked, isEmpty);
   });
 
-  test("refuses a key that isn't the address's view key", () {
+  test('refuses a subaddress', () async {
+    final mainnetSub = '8${'1' * 94}';
+    final stagenetSub = '7${'1' * 94}';
+    for (final code in [
+      mainnetSub,
+      stagenetSub,
+      'monero:$mainnetSub?tx_amount=1',
+      gui(mainnetSub),
+      feather({'primaryAddress': stagenetSub}),
+    ]) {
+      expect(await refusal(code), Refusal.subaddress, reason: code);
+    }
+    expect(checked, isEmpty);
+  });
+
+  test('reads a primary address alone, as receive screens show it', () async {
+    for (final (code, expected) in [
+      (mainnet, mainnet),
+      (' $stagenet\n', stagenet),
+      ('monero:$mainnet', mainnet),
+      ('MONERO:$stagenet', stagenet),
+      (
+        'monero:$mainnet?tx_amount=0.5&tx_description=Rent%20for%20May'
+            '&recipient_name=Shop&tx_payment_id=${'0' * 64}',
+        mainnet,
+      ),
+    ]) {
+      expect(await read(code), (
+        address: expected,
+        viewKey: null,
+        restoreHeight: null,
+      ), reason: code);
+    }
+    // Nothing to check a key against.
+    expect(checked, isEmpty);
+  });
+
+  test(
+    "reads a private view key alone, checked against Setup's address",
+    () async {
+      expect(await read(zeros, address: mainnet), (
+        address: null,
+        viewKey: zeros,
+        restoreHeight: null,
+      ));
+      expect(checked, [mainnet]);
+      expect(
+        (await read(' ${'A' * 64}\n', address: stagenet)).viewKey,
+        'A' * 64,
+      );
+
+      // No address yet, or none that can be checked against.
+      expect(await refusal(zeros), Refusal.needsAddress);
+      expect(await refusal(zeros, address: ''), Refusal.needsAddress);
+      expect(
+        await refusal(zeros, address: '8${'1' * 94}'),
+        Refusal.needsAddress,
+      );
+      expect(
+        await refusal(zeros, address: '9${'1' * 94}'),
+        Refusal.needsAddress,
+      );
+      expect(checked, [mainnet, stagenet]);
+      keyAnswer = 'failed to parse address';
+      expect(await refusal(zeros, address: mainnet), Refusal.needsAddress);
+
+      // The spend key, a public key or another wallet's key.
+      keyAnswer = 'view key does not match address';
+      expect(await refusal(zeros, address: mainnet), Refusal.keyMismatch);
+    },
+  );
+
+  test("refuses a key that isn't the address's view key", () async {
     keyAnswer = 'view key does not match address';
-    expect(refusal(gui(mainnet)), Refusal.keyMismatch);
+    expect(await refusal(gui(mainnet)), Refusal.keyMismatch);
     keyAnswer = 'failed to verify secret view key';
-    expect(refusal(feather({})), Refusal.keyMismatch);
+    expect(await refusal(feather({})), Refusal.keyMismatch);
     // An address with a wrong checksum.
     keyAnswer = 'failed to parse address';
-    expect(refusal(gui(mainnet)), Refusal.notWalletCode);
+    expect(await refusal(gui(mainnet)), Refusal.notWalletCode);
+  });
+
+  test("refuses a code when the view key check can't be made", () async {
+    final refused = readWalletQr(
+      gui(mainnet),
+      keysProblem: ({required address, required viewKey}) async =>
+          throw StateError('the wallet library would not load'),
+    );
+    await expectLater(
+      refused,
+      throwsA(
+        isA<RefusedCode>().having((e) => e.reason, 'reason', Refusal.unchecked),
+      ),
+    );
   });
 
   group('Scan wallet QR', () {
@@ -219,6 +324,21 @@ void main() {
     Future<void> phone(WidgetTester tester) async {
       await tester.binding.setSurfaceSize(const Size(430, 1800));
       addTearDown(() => tester.binding.setSurfaceSize(null));
+    }
+
+    // The view key check runs on a helper isolate, which the fake clock of a
+    // widget test doesn't wait for: let it finish, then settle the screens.
+    Future<void> settleCheck(WidgetTester tester) async {
+      final checking = find.text('Checking the code…');
+      await tester.pump();
+      for (var i = 0; i < 100 && checking.evaluate().isNotEmpty; i++) {
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 50)),
+        );
+        await tester.pump(const Duration(milliseconds: 50));
+      }
+      await tester.pumpAndSettle();
+      expect(checking, findsNothing);
     }
 
     _FakeCamera useCamera({bool allow = true}) {
@@ -299,12 +419,12 @@ void main() {
       // Another wallet's key with this address is what a spend key looks
       // like to the check.
       camera.show(guiCode(full, viewKey: otherKey));
-      await tester.pump();
+      await settleCheck(tester);
       expect(find.text("This key isn't this address's view key"), findsOne);
       await tester.tap(find.text('Scan again'));
       await tester.pump();
 
-      camera.show('monero:${full.address()}?tx_amount=1');
+      camera.show('https://example.com/');
       await tester.pump();
       expect(find.text('Not a wallet code'), findsOne);
       expect(find.text('Type it in instead'), findsOne);
@@ -312,7 +432,11 @@ void main() {
       await tester.pump();
 
       camera.show(guiCode(full));
-      await tester.pumpAndSettle();
+      await tester.pump();
+      // The camera is off while the key is checked off the UI isolate.
+      expect(find.text('Checking the code…'), findsOne);
+      expect(cameraView, findsNothing);
+      await settleCheck(tester);
       expect(find.text('Watch a wallet'), findsOne);
       expect(textIn(tester, address), full.address());
       expect(textIn(tester, viewKey), full.secretViewKey());
@@ -347,11 +471,174 @@ void main() {
           'walletName': 'Savings',
         }),
       );
-      await tester.pumpAndSettle();
+      await settleCheck(tester);
       expect(textIn(tester, address), mainnetFull.address());
       expect(textIn(tester, restoreHeight), '3100000');
       expect(find.text('Matches this address'), findsOne);
       expect(find.text('Filled from QR code'), findsOne);
+    });
+
+    testWidgets(
+      'fills the address, then the view key, from codes of their own',
+      (tester) async {
+        final camera = useCamera();
+        await phone(tester);
+        await tester.pumpWidget(const MainApp());
+        await tester.enterText(restoreHeight, '1500');
+        await tester.pump();
+
+        // A key before there is an address to check it against.
+        await tester.tap(find.text('Scan QR code'));
+        await tester.pumpAndSettle();
+        camera.show(full.secretViewKey());
+        await tester.pump();
+        expect(find.text('This key needs its address'), findsOne);
+        await tester.tap(find.text('Scan again'));
+        await tester.pump();
+
+        // A subaddress, then the wallet's own receive code.
+        camera.show(full.address(addressIndex: 1));
+        await tester.pump();
+        expect(find.text("That's a subaddress"), findsOne);
+        await tester.tap(find.text('Scan again'));
+        await tester.pump();
+        camera.show('monero:${full.address()}?tx_amount=1');
+        await tester.pumpAndSettle();
+        expect(find.text('Watch a wallet'), findsOne);
+        expect(textIn(tester, address), full.address());
+        expect(textIn(tester, viewKey), isEmpty);
+        expect(find.text('Address from QR code'), findsOne);
+
+        // Its spend key and its public view key look like a view key, and
+        // neither is one.
+        await tester.tap(find.text('Scan QR code'));
+        await tester.pumpAndSettle();
+        for (final key in [full.secretSpendKey(), full.publicViewKey()]) {
+          camera.show(key);
+          await settleCheck(tester);
+          expect(find.text("This key isn't this address's view key"), findsOne);
+          await tester.tap(find.text('Scan again'));
+          await tester.pump();
+        }
+
+        camera.show(full.secretViewKey());
+        await settleCheck(tester);
+        expect(find.text('Watch a wallet'), findsOne);
+        expect(textIn(tester, address), full.address());
+        expect(textIn(tester, viewKey), full.secretViewKey());
+        expect(textIn(tester, restoreHeight), '1500');
+        expect(find.text('Filled from QR code'), findsOne);
+        expect(find.text('Matches this address'), findsOne);
+        expect(enabled(tester, 'Continue'), isTrue);
+
+        // A typed key is no longer the scanned one.
+        await tester.enterText(viewKey, mainnetFull.secretViewKey());
+        await tester.pump();
+        expect(find.text('Address from QR code'), findsOne);
+      },
+    );
+
+    testWidgets('the iPhone camera hands each view its code, then stops it', (
+      tester,
+    ) async {
+      // The Runner's side of the camera channel and of platform views,
+      // played here: the app asks, and the "Runner" sends codes back.
+      final messenger = tester.binding.defaultBinaryMessenger;
+      final asked = <MethodCall>[];
+      messenger.setMockMethodCallHandler(IosQrCamera.channel, (call) async {
+        asked.add(call);
+        return call.method == 'allowed' ? true : null;
+      });
+      Future<void> read(int view, String text) =>
+          messenger.handlePlatformMessage(
+            IosQrCamera.channel.name,
+            IosQrCamera.channel.codec.encodeMethodCall(
+              MethodCall('code', {'view': view, 'text': text}),
+            ),
+            (_) {},
+          );
+      final views = <int>[];
+      // What the "Runner" does while it makes a view, before the app hears
+      // that the view exists.
+      Future<void> Function(int view)? making;
+      messenger.setMockMethodCallHandler(SystemChannels.platform_views, (
+        call,
+      ) async {
+        if (call.method == 'create') {
+          final view = (call.arguments as Map<Object?, Object?>)['id']! as int;
+          views.add(view);
+          await making?.call(view);
+        }
+        return null;
+      });
+      addTearDown(() {
+        messenger.setMockMethodCallHandler(IosQrCamera.channel, null);
+        messenger.setMockMethodCallHandler(SystemChannels.platform_views, null);
+      });
+      final camera = IosQrCamera();
+      qrCamera = camera;
+      addTearDown(() => qrCamera = null);
+      final spendCode = gui(
+        mainnet,
+        query: 'view_key=$zeros&height=1&spend_key=$zeros',
+      );
+
+      await phone(tester);
+      await tester.pumpWidget(const MainApp());
+      await tester.tap(find.text('Scan QR code'));
+      await tester.pumpAndSettle();
+      expect(asked.map((call) => call.method), ['allowed']);
+      expect(views, hasLength(1));
+
+      await read(views.first, 'https://example.com/');
+      await tester.pump();
+      expect(find.text('Not a wallet code'), findsOne);
+      // The view went with the refusal, and its camera was told to stop.
+      expect(find.byType(UiKitView), findsNothing);
+      expect(
+        asked.where((call) => call.method == 'stop').map((c) => c.arguments),
+        [views.first],
+      );
+      // A code the view read as it went is dropped, not kept in memory.
+      await read(views.first, spendCode);
+      await tester.pump();
+      expect(camera.heldCodes, 0);
+      expect(find.text('Not a wallet code'), findsOne);
+
+      // A code the next view reads before the app hears it was made is kept
+      // for it.
+      making = (view) => read(view, guiCode(full));
+      await tester.tap(find.text('Scan again'));
+      await tester.pump();
+      await settleCheck(tester);
+      expect(views, [views.first, views.first + 1]);
+      expect(camera.heldCodes, 0);
+      expect(find.text('Watch a wallet'), findsOne);
+      expect(textIn(tester, address), full.address());
+      expect(find.text('Filled from QR code'), findsOne);
+      expect(
+        asked.where((call) => call.method == 'stop').map((c) => c.arguments),
+        [views.first, views.first + 1],
+      );
+
+      // A code read for a view that is taken away before the app hears it
+      // was made is dropped when it goes.
+      final made = Completer<void>();
+      making = (view) async {
+        await read(view, spendCode);
+        await made.future;
+      };
+      await tester.tap(find.text('Scan QR code'));
+      await tester.pumpAndSettle();
+      expect(views, hasLength(3));
+      expect(camera.heldCodes, 1);
+      await tester.tap(find.text('Back'));
+      await tester.pumpAndSettle();
+      expect(camera.heldCodes, 0);
+      made.complete();
+      await tester.pump();
+      expect(find.text('Watch a wallet'), findsOne);
+      expect(textIn(tester, address), full.address());
     });
 
     testWidgets('says when the camera is off, and goes back to typing', (

@@ -80,9 +80,10 @@ class _SetupScreenState extends State<SetupScreen> {
   /// Whether the view key belongs to the address; null until both are filled.
   bool? _matches;
 
-  /// True while the address and view key are the ones a scanned wallet QR
-  /// code filled in.
-  bool _fromQr = false;
+  /// Whether the address and the view key are the ones scanned QR codes
+  /// filled in, until they are typed over.
+  bool _addressFromQr = false;
+  bool _keyFromQr = false;
 
   @override
   void initState() {
@@ -127,7 +128,9 @@ class _SetupScreenState extends State<SetupScreen> {
         networkOf(address) == Network.stagenet;
   }
 
-  void _check() {
+  /// [scanned]: the fields were just filled from a code whose view key Scan
+  /// wallet QR already checked against its address.
+  void _check({bool scanned = false}) {
     var address = _address.text.trim();
     var viewKey = _viewKey.text.trim();
     _addressError = address.isEmpty ? null : addressProblem(address);
@@ -148,10 +151,9 @@ class _SetupScreenState extends State<SetupScreen> {
         viewKey.isNotEmpty &&
         _addressError == null &&
         _viewKeyError == null) {
-      final problem = ViewWallet.keysProblem(
-        address: address,
-        viewKey: viewKey,
-      );
+      final problem = scanned
+          ? null
+          : ViewWallet.keysProblem(address: address, viewKey: viewKey);
       if (problem == 'failed to parse address') {
         _addressError =
             "That isn't a valid address. Check it was copied in full.";
@@ -162,6 +164,8 @@ class _SetupScreenState extends State<SetupScreen> {
         if (problem != null) _viewKey.clear();
       }
     }
+    if (_address.text.isEmpty) _addressFromQr = false;
+    if (_viewKey.text.isEmpty) _keyFromQr = false;
     setState(() {});
   }
 
@@ -183,7 +187,8 @@ class _SetupScreenState extends State<SetupScreen> {
     _viewKey.clear();
     setState(() {
       _matches = null;
-      _fromQr = false;
+      _addressFromQr = false;
+      _keyFromQr = false;
     });
 
     final navigator = Navigator.of(context);
@@ -213,26 +218,55 @@ class _SetupScreenState extends State<SetupScreen> {
   }
 
   /// Scan wallet QR, which comes back with a code that passed every check, or
-  /// with nothing.
+  /// with nothing. A private view key on its own is checked against the
+  /// address already here.
   Future<void> _scan(QrCamera camera) async {
-    final wallet = await Navigator.push<WalletQr>(
+    final address = _address.text.trim();
+    final code = await Navigator.push<WalletQr>(
       context,
-      MaterialPageRoute(builder: (_) => ScanWalletScreen(camera: camera)),
+      MaterialPageRoute(
+        builder: (_) => ScanWalletScreen(
+          camera: camera,
+          address: addressProblem(address) == null ? address : null,
+        ),
+      ),
     );
-    if (wallet == null || !mounted) return;
-    _address.text = wallet.address;
-    _viewKey.text = wallet.viewKey;
-    _restoreHeight.text = '${wallet.restoreHeight}';
-    _check();
-    setState(() => _fromQr = _matches == true);
+    if (code == null || !mounted) return;
+    if (code.address case final address?) {
+      _address.text = address;
+      _addressFromQr = true;
+    }
+    if (code.viewKey case final viewKey?) {
+      _viewKey.text = viewKey;
+      _keyFromQr = true;
+    }
+    if (code.restoreHeight case final height?) {
+      _restoreHeight.text = '$height';
+    }
+    // A scanned view key was already checked against the address; an
+    // address alone is checked against a typed key as typing would.
+    _check(scanned: code.viewKey != null);
   }
 
-  /// A typed change to the address or view key: they are no longer the
-  /// scanned ones.
-  void _typed(String _) {
-    _fromQr = false;
+  /// A typed change to the address: it is no longer the scanned one.
+  void _typedAddress(String _) {
+    _addressFromQr = false;
     _check();
   }
+
+  /// A typed change to the view key: it is no longer the scanned one.
+  void _typedViewKey(String _) {
+    _keyFromQr = false;
+    _check();
+  }
+
+  /// What the Scan QR code row says came from codes, or null.
+  String? get _fromQr => switch ((_addressFromQr, _keyFromQr)) {
+    (true, true) => 'Filled from QR code',
+    (true, false) => 'Address from QR code',
+    (false, true) => 'View key from QR code',
+    (false, false) => null,
+  };
 
   @override
   Widget build(BuildContext context) {
@@ -268,7 +302,7 @@ class _SetupScreenState extends State<SetupScreen> {
               TextField(
                 key: const Key('address'),
                 controller: _address,
-                onChanged: _typed,
+                onChanged: _typedAddress,
                 minLines: 2,
                 maxLines: 3,
                 autocorrect: false,
@@ -289,7 +323,7 @@ class _SetupScreenState extends State<SetupScreen> {
               TextField(
                 key: const Key('viewKey'),
                 controller: _viewKey,
-                onChanged: _typed,
+                onChanged: _typedViewKey,
                 obscureText: true,
                 autocorrect: false,
                 enableSuggestions: false,
@@ -351,12 +385,12 @@ class _SetupScreenState extends State<SetupScreen> {
   }
 }
 
-/// Setup's way to Scan wallet QR, which says once the fields came from a
-/// code.
+/// Setup's way to Scan wallet QR, which says once fields came from codes.
 class _ScanRow extends StatelessWidget {
   const _ScanRow({required this.fromQr, required this.onTap});
 
-  final bool fromQr;
+  /// What came from codes, or null.
+  final String? fromQr;
   final VoidCallback onTap;
 
   @override
@@ -398,13 +432,13 @@ class _ScanRow extends StatelessWidget {
                         ),
                       ),
                       const SizedBox(height: 2),
-                      if (fromQr)
+                      if (fromQr case final filled?)
                         Row(
                           children: [
                             Icon(Icons.check, size: 14, color: c.green),
                             const SizedBox(width: 4),
                             Text(
-                              'Filled from QR code',
+                              filled,
                               style: context.caption.copyWith(color: c.green),
                             ),
                           ],

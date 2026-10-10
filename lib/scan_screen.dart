@@ -1,12 +1,14 @@
 /// Screen 1a of the design: Scan wallet QR. Fills Setup from the Monero GUI's
-/// View Only Wallet code or Feather's View-Only QR, and refuses any code that
-/// carries a spend key or seed (lib/wallet_qr.dart).
+/// View Only Wallet code or Feather's View-Only QR, or from an address or a
+/// private view key on its own, and refuses any code that carries a spend key
+/// or seed (lib/wallet_qr.dart).
 ///
 /// The camera reads codes on the device. The picture is never saved, and the
 /// decoded text is held in memory only until Setup's fields are filled.
 library;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import 'ui.dart';
 import 'wallet_qr.dart';
@@ -26,13 +28,126 @@ abstract interface class QrCamera {
 }
 
 /// The camera Setup scans with, or null where the app has none, as in the
-/// Windows test build: Setup then has no Scan QR code and stays typed.
+/// Windows test build: Setup then has no Scan QR code and stays typed. main()
+/// sets it on iPhone.
 QrCamera? qrCamera;
 
+/// The iPhone's camera, through the Runner (ios/Runner/QrCamera.swift):
+/// Apple's own AVFoundation reads the codes on the phone, and the picture is
+/// a platform view that is only ever drawn on screen.
+class IosQrCamera implements QrCamera {
+  IosQrCamera() {
+    channel.setMethodCallHandler(_handle);
+  }
+
+  static const channel = MethodChannel('monero_view_wallet/camera');
+
+  /// Where each camera view on screen hands its code, by platform view id.
+  final _onCode = <int, ValueChanged<String>>{};
+
+  /// Camera views on screen whose id isn't known here yet.
+  var _waiting = 0;
+
+  /// A code read before its view's id was known here. Kept only while a view
+  /// is waiting for its id, so a code no view will take, a refused one
+  /// included, isn't held in memory.
+  final _early = <int, String>{};
+
+  /// How many codes are held for views: for tests.
+  @visibleForTesting
+  int get heldCodes => _early.length;
+
+  void _doneWaiting() {
+    if (--_waiting == 0) _early.clear();
+  }
+
+  Future<void> _handle(MethodCall call) async {
+    if (call.method != 'code') return;
+    final arguments = call.arguments as Map<Object?, Object?>;
+    final view = arguments['view'] as int;
+    final text = arguments['text'] as String;
+    final onCode = _onCode.remove(view);
+    if (onCode != null) {
+      onCode(text);
+    } else if (_waiting > 0) {
+      _early[view] = text;
+    }
+  }
+
+  @override
+  Future<bool> allowed() async {
+    try {
+      return await channel.invokeMethod<bool>('allowed') ?? false;
+    } on PlatformException {
+      return false;
+    }
+  }
+
+  @override
+  Future<void> openSettings() => channel.invokeMethod('openSettings');
+
+  @override
+  Widget view(ValueChanged<String> onCode) => _IosCameraView(this, onCode);
+}
+
+class _IosCameraView extends StatefulWidget {
+  const _IosCameraView(this.camera, this.onCode);
+
+  final IosQrCamera camera;
+  final ValueChanged<String> onCode;
+
+  @override
+  State<_IosCameraView> createState() => _IosCameraViewState();
+}
+
+class _IosCameraViewState extends State<_IosCameraView> {
+  int? _id;
+
+  @override
+  void initState() {
+    super.initState();
+    widget.camera._waiting++;
+  }
+
+  void _created(int id) {
+    final early = widget.camera._early.remove(id);
+    if (_id == null) widget.camera._doneWaiting();
+    _id = id;
+    if (early != null) {
+      widget.onCode(early);
+    } else {
+      widget.camera._onCode[id] = (code) => widget.onCode(code);
+    }
+  }
+
+  @override
+  void dispose() {
+    final id = _id;
+    if (id == null) {
+      widget.camera._doneWaiting();
+    } else {
+      widget.camera._onCode.remove(id);
+      // The camera goes off now, not whenever iOS lets go of the view.
+      IosQrCamera.channel.invokeMethod('stop', id);
+    }
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => UiKitView(
+    viewType: 'monero_view_wallet/camera',
+    onPlatformViewCreated: _created,
+  );
+}
+
 class ScanWalletScreen extends StatefulWidget {
-  const ScanWalletScreen({super.key, required this.camera});
+  const ScanWalletScreen({super.key, required this.camera, this.address});
 
   final QrCamera camera;
+
+  /// The primary address already on Setup, which a private view key scanned
+  /// on its own is checked against.
+  final String? address;
 
   @override
   State<ScanWalletScreen> createState() => _ScanWalletScreenState();
@@ -44,7 +159,8 @@ class _ScanWalletScreenState extends State<ScanWalletScreen> {
   Refusal? _refusal;
 
   /// True from the first code the camera hands over until Scan again: the
-  /// screen reads one code per scan.
+  /// screen reads one code per scan, and the camera view goes while that code
+  /// is checked.
   bool _read = false;
 
   /// Each scan gets a camera view of its own.
@@ -58,15 +174,19 @@ class _ScanWalletScreenState extends State<ScanWalletScreen> {
     });
   }
 
-  void _onCode(String code) {
+  Future<void> _onCode(String code) async {
     if (_read || !mounted) return;
-    _read = true;
+    // The camera view goes, which turns the camera off.
+    setState(() => _read = true);
     try {
-      final wallet = readWalletQr(code);
-      Navigator.pop(context, wallet);
+      final wallet = await readWalletQr(code, address: widget.address);
+      if (mounted) Navigator.pop(context, wallet);
     } on RefusedCode catch (e) {
-      // The camera view goes, which turns the camera off.
-      setState(() => _refusal = e.reason);
+      if (mounted) setState(() => _refusal = e.reason);
+    } catch (_) {
+      // readWalletQr throws nothing else, but if it did, the screen must not
+      // stay on "Checking the code…".
+      if (mounted) setState(() => _refusal = Refusal.unchecked);
     }
   }
 
@@ -82,7 +202,7 @@ class _ScanWalletScreenState extends State<ScanWalletScreen> {
   Widget build(BuildContext context) {
     final c = context.colors;
     final refusal = _refusal;
-    final live = _allowed == true && refusal == null;
+    final live = _allowed == true && !_read;
     return Screen(
       title: 'Scan wallet QR',
       children: [
@@ -130,6 +250,7 @@ class _ScanWalletScreenState extends State<ScanWalletScreen> {
           label: switch (_allowed) {
             null => '',
             false => 'Camera off',
+            true when refusal == null => 'Checking the code…',
             true => 'Camera paused',
           },
           camera: live
@@ -177,6 +298,13 @@ class _ScanWalletScreenState extends State<ScanWalletScreen> {
         const SizedBox(height: 24),
         Text(
           'Feather Wallet works too: Wallet → View-Only → Show QR.',
+          textAlign: TextAlign.center,
+          style: context.caption,
+        ),
+        const SizedBox(height: 4),
+        Text(
+          'Other wallets: scan the primary address, then the private view key '
+          'on its own.',
           textAlign: TextAlign.center,
           style: context.caption,
         ),
@@ -338,7 +466,8 @@ class _RefusalCard extends StatelessWidget {
       Refusal.notWalletCode => (
         'Not a wallet code',
         'Scan the View Only Wallet code under Export wallet in the '
-            "Monero GUI, or Feather's View-Only QR.",
+            "Monero GUI, or Feather's View-Only QR. From another wallet, "
+            'scan the primary address, then the private view key.',
         true,
         c.amber,
       ),
@@ -349,12 +478,33 @@ class _RefusalCard extends StatelessWidget {
         false,
         c.amber,
       ),
+      Refusal.subaddress => (
+        "That's a subaddress",
+        "Scan the wallet's primary address, which starts with 4 (5 for a "
+            'stagenet test wallet). Receive screens often show a '
+            'subaddress.',
+        true,
+        c.amber,
+      ),
+      Refusal.needsAddress => (
+        'This key needs its address',
+        "Nothing from the code was kept. Scan or type the wallet's primary "
+            'address first, then scan its private view key.',
+        true,
+        c.amber,
+      ),
       Refusal.keyMismatch => (
         "This key isn't this address's view key",
         'Nothing from the code was kept. Scan the View Only Wallet code '
-            'again.',
+            "again, or this address's private view key.",
         true,
         c.red,
+      ),
+      Refusal.unchecked => (
+        "This code couldn't be checked",
+        'Nothing from it was kept. Scan it again, or type the wallet in.',
+        true,
+        c.amber,
       ),
     };
     return AppCard(
