@@ -21,6 +21,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:qr/qr.dart';
 
+import 'advanced_screen.dart';
 import 'key_images_screen.dart';
 import 'lock.dart';
 import 'qr_tile.dart';
@@ -455,7 +456,7 @@ class _KeyImagesQrScreenState extends State<KeyImagesQrScreen> {
         ),
         const SizedBox(height: 6),
         Text(
-          'The picture stays on this iPhone and is never saved.',
+          'The picture stays on this $thisDevice and is never saved.',
           textAlign: TextAlign.center,
           style: context.caption,
         ),

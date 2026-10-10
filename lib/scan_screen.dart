@@ -7,9 +7,11 @@
 /// decoded text is held in memory only until Setup's fields are filled.
 library;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import 'advanced_screen.dart';
 import 'ui.dart';
 import 'wallet_qr.dart';
 
@@ -35,14 +37,16 @@ abstract interface class QrCamera {
 
 /// The camera Setup scans with, or null where the app has none, as in the
 /// Windows test build: Setup then has no Scan QR code and stays typed. main()
-/// sets it on iPhone.
+/// sets it on iPhone and Android.
 QrCamera? qrCamera;
 
-/// The iPhone's camera, through the Runner (ios/Runner/QrCamera.swift):
-/// Apple's own AVFoundation reads the codes on the phone, and the picture is
-/// a platform view that is only ever drawn on screen.
-class IosQrCamera implements QrCamera {
-  IosQrCamera() {
+/// The phone's camera, through the Runner: on iPhone ios/Runner/QrCamera.swift,
+/// where Apple's own AVFoundation reads the codes, and on Android
+/// android/app/src/main/kotlin/.../QrCamera.kt, where CameraX runs the camera
+/// and ZXing reads them. Either way the codes are read on the phone, and the
+/// picture is a platform view that is only ever drawn on screen.
+class PhoneQrCamera implements QrCamera {
+  PhoneQrCamera() {
     channel.setMethodCallHandler(_handle);
   }
 
@@ -99,25 +103,25 @@ class IosQrCamera implements QrCamera {
 
   @override
   Widget view(ValueChanged<String> onCode, {bool animated = false}) =>
-      _IosCameraView(this, onCode, animated: animated);
+      _PhoneCameraView(this, onCode, animated: animated);
 
   @override
   Future<void> keepScreenOn(bool on) =>
       channel.invokeMethod('keepScreenOn', on);
 }
 
-class _IosCameraView extends StatefulWidget {
-  const _IosCameraView(this.camera, this.onCode, {required this.animated});
+class _PhoneCameraView extends StatefulWidget {
+  const _PhoneCameraView(this.camera, this.onCode, {required this.animated});
 
-  final IosQrCamera camera;
+  final PhoneQrCamera camera;
   final ValueChanged<String> onCode;
   final bool animated;
 
   @override
-  State<_IosCameraView> createState() => _IosCameraViewState();
+  State<_PhoneCameraView> createState() => _PhoneCameraViewState();
 }
 
-class _IosCameraViewState extends State<_IosCameraView> {
+class _PhoneCameraViewState extends State<_PhoneCameraView> {
   int? _id;
 
   @override
@@ -147,19 +151,27 @@ class _IosCameraViewState extends State<_IosCameraView> {
     } else {
       widget.camera._onCode.remove(id);
       widget.camera._animated.remove(id);
-      // The camera goes off now, not whenever iOS lets go of the view.
-      IosQrCamera.channel.invokeMethod('stop', id);
+      // The camera goes off now, not whenever the phone lets go of the view.
+      PhoneQrCamera.channel.invokeMethod('stop', id);
     }
     super.dispose();
   }
 
   @override
-  Widget build(BuildContext context) => UiKitView(
-    viewType: 'monero_view_wallet/camera',
-    onPlatformViewCreated: _created,
-    creationParams: {'animated': widget.animated},
-    creationParamsCodec: const StandardMessageCodec(),
-  );
+  Widget build(BuildContext context) =>
+      defaultTargetPlatform == TargetPlatform.android
+      ? AndroidView(
+          viewType: 'monero_view_wallet/camera',
+          onPlatformViewCreated: _created,
+          creationParams: {'animated': widget.animated},
+          creationParamsCodec: const StandardMessageCodec(),
+        )
+      : UiKitView(
+          viewType: 'monero_view_wallet/camera',
+          onPlatformViewCreated: _created,
+          creationParams: {'animated': widget.animated},
+          creationParamsCodec: const StandardMessageCodec(),
+        );
 }
 
 class ScanWalletScreen extends StatefulWidget {
@@ -312,7 +324,7 @@ class _ScanWalletScreenState extends State<ScanWalletScreen> {
           ),
           const SizedBox(height: 6),
           Text(
-            'The picture stays on this iPhone and is never saved.',
+            'The picture stays on this $thisDevice and is never saved.',
             textAlign: TextAlign.center,
             style: context.caption,
           ),

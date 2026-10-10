@@ -138,10 +138,10 @@ Future<String> _tor() async {
 /// screen on, and lets it sleep again.
 Future<String> _camera() async {
   try {
-    final status = await IosQrCamera.channel.invokeMethod<String>('status');
-    await IosQrCamera.channel.invokeMethod<void>('stop', -1);
-    await IosQrCamera.channel.invokeMethod<void>('keepScreenOn', true);
-    await IosQrCamera.channel.invokeMethod<void>('keepScreenOn', false);
+    final status = await PhoneQrCamera.channel.invokeMethod<String>('status');
+    await PhoneQrCamera.channel.invokeMethod<void>('stop', -1);
+    await PhoneQrCamera.channel.invokeMethod<void>('keepScreenOn', true);
+    await PhoneQrCamera.channel.invokeMethod<void>('keepScreenOn', false);
     return status == 'notDetermined' ? 'ok' : 'unexpected: $status';
   } catch (e) {
     return 'failed: $e';

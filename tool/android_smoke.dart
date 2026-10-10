@@ -3,15 +3,18 @@
 // wallet library is in the app and works on Android, that the wallet is saved
 // in the app's own folder with its password in the Keystore, that the
 // password is still there when the Keystore is read afresh, as at the next
-// launch, and that the app draws its first screen.
+// launch, that the Tor Project's tor was installed with the app and runs,
+// that the camera's native code answers, and that the app draws its first
+// screen.
 //
 // The library is called with obviously fake input (no real address or key).
 // The saved wallet is a random throwaway made here, as in the app's tests, and
 // deleted again with its password. Only "ok" or the error is printed, each
 // line starting "android_smoke: ", and read by tool/android_smoke.sh from the
-// emulator's log, together with the names of the files the app keeps. Nothing
-// goes to the network: the saved wallet's node is 127.0.0.1 port 9, where
-// nothing listens.
+// emulator's log, together with the names of the files the app keeps and the
+// libraries tor says it was built with. Nothing goes to the network: the saved
+// wallet's node is 127.0.0.1 port 9, where nothing listens, and tor is only
+// asked for its version.
 
 import 'dart:io';
 
@@ -20,6 +23,7 @@ import 'package:flutter/widgets.dart';
 import 'package:monero/src/monero.dart';
 import 'package:monero_view_wallet/android_keystore.dart';
 import 'package:monero_view_wallet/main.dart';
+import 'package:monero_view_wallet/scan_screen.dart';
 import 'package:monero_view_wallet/secret_store.dart';
 import 'package:monero_view_wallet/tor.dart';
 import 'package:monero_view_wallet/wallet.dart';
@@ -33,7 +37,8 @@ Future<void> main() async {
   report('folder: ${_folder(folder)}');
   report('keystore: ${await _keystore()}');
   report('saved wallet: ${await _savedWallet()}');
-  report('no tor: ${hasTor ? 'unexpected: this build has Tor' : 'ok'}');
+  report('tor: ${await _tor()}');
+  report('camera: ${await _camera()}');
   // Names only, to show where the app and wallet2 keep their files.
   final home = Platform.environment['HOME'];
   if (home != null) {
@@ -44,7 +49,77 @@ Future<void> main() async {
   runApp(const MainApp());
   WidgetsBinding.instance.addPostFrameCallback((_) {
     report('first frame: ok');
+    _cameraView();
   });
+}
+
+/// Once tool/android_smoke.sh has allowed the camera, as a person does at the
+/// first scan, shows Scan wallet QR for a while, then takes it away again.
+/// The script checks that the camera is on while it shows, and off once it
+/// has gone. Nothing the camera sees is kept: no code is there to read.
+Future<void> _cameraView() async {
+  try {
+    final camera = qrCamera;
+    if (camera == null) return report('camera view: no camera');
+    var status = '';
+    for (var i = 0; i < 180 && status != 'authorized'; i++) {
+      await Future<void>.delayed(const Duration(seconds: 1));
+      status = await PhoneQrCamera.channel.invokeMethod<String>('status') ?? '';
+    }
+    if (status != 'authorized') return report('camera view: not allowed');
+    runApp(MainApp(home: ScanWalletScreen(camera: camera)));
+    await Future<void>.delayed(const Duration(seconds: 2));
+    report('camera view: shown');
+    await Future<void>.delayed(const Duration(seconds: 30));
+    runApp(const MainApp());
+    await Future<void>.delayed(const Duration(seconds: 2));
+    report('camera view: gone');
+  } catch (e) {
+    report('camera view: failed: $e');
+  }
+}
+
+/// The tor that ships with the app is where the Runner says (MainActivity.kt),
+/// Android may run it, and it is the one tool/fetch_tor.sh pins. The
+/// libraries it was built with are reported too, for docs/third-party-code.md.
+Future<String> _tor() async {
+  try {
+    final program = torProgram;
+    if (!hasTor || program == null) return 'not in use';
+    if (torFolder != '${Platform.environment['HOME']}/tor') {
+      return 'unexpected: folder';
+    }
+    final libraries = await Process.run(program, ['--library-versions']);
+    for (final line in '${libraries.stdout}'.split('\n')) {
+      if (line.trim().isNotEmpty) report('tor library: ${line.trim()}');
+    }
+    final version = await Process.run(program, ['--version']);
+    final out = '${version.stdout}';
+    return out.startsWith('Tor version 0.4.9.13.')
+        ? 'ok'
+        : 'unexpected: ${out.split('\n').first}';
+  } catch (e) {
+    return 'failed: $e';
+  }
+}
+
+/// The camera's native code (QrCamera.kt) answers, without asking for the
+/// camera, which nobody on the emulator could allow: the app was just
+/// installed, so it may not use it yet. Stopping a camera view that doesn't
+/// exist does nothing. Key images by QR keeps the screen on, and lets it
+/// sleep again.
+Future<String> _camera() async {
+  try {
+    // As main() does on Android.
+    qrCamera = PhoneQrCamera();
+    final status = await PhoneQrCamera.channel.invokeMethod<String>('status');
+    await PhoneQrCamera.channel.invokeMethod<void>('stop', -1);
+    await PhoneQrCamera.channel.invokeMethod<void>('keepScreenOn', true);
+    await PhoneQrCamera.channel.invokeMethod<void>('keepScreenOn', false);
+    return status == 'notAuthorized' ? 'ok' : 'unexpected: $status';
+  } catch (e) {
+    return 'failed: $e';
+  }
 }
 
 /// wallet2 rejecting a made-up address shows the library loaded and ran.

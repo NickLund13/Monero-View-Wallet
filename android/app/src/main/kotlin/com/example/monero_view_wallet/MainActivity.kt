@@ -18,6 +18,11 @@ class MainActivity : FlutterActivity() {
         // (keepOnDevice in lib/main.dart): the app's own folder that Android
         // never backs up. Set before Flutter starts the app's Dart code.
         Os.setenv("HOME", noBackupFilesDir.path, true)
+        // The Tor Project's tor, which ships as libtor.so: Android runs a
+        // program only from the app's native library folder, where it puts
+        // the libraries when the app is installed (build.gradle.kts). The
+        // app's Dart code starts it from there (lib/tor.dart).
+        Os.setenv("MONERO_VIEW_TOR", "${applicationInfo.nativeLibraryDir}/libtor.so", true)
         super.onCreate(savedInstanceState)
     }
 
@@ -33,6 +38,7 @@ class MainActivity : FlutterActivity() {
                     it.dartExecutor.binaryMessenger,
                     context.noBackupFilesDir.resolve("secrets"),
                 )
+                it.plugins.add(QrCamera())
                 engine = it
             }
 

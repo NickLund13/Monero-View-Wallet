@@ -8,6 +8,11 @@
 # libraries it loads into the same folder, for the tests only.
 # On a Mac it fetches tor.xcframework into ios/: the same tor built as a
 # library for iPhone, which the iPhone build links into the app.
+# With the argument "android", on any of them, it fetches the Tor Project's
+# Android tor instead, one for each kind of processor the Android build is
+# made for, into android/app/src/main/jniLibs/, from where the build puts it in
+# the app:
+#   sh tool/fetch_tor.sh android
 set -eu
 
 # Tor Expert Bundle 15.0.24, which holds tor 0.4.9.13, from the Tor Project's
@@ -25,6 +30,22 @@ LINUX_TOR_SHA256=74f5a47bfe0fc7f7c3ec2fe6c772ec6e52d4a9e9e9c95c7f274f5330e02a881
 LINUX_CRYPTO_SHA256=6ed9fc77689324da28567478e0ed226f4f450f71b47852088e9b0b9220eb0404
 LINUX_SSL_SHA256=e95f55c73b63a4e25db7b9c74abdd35c42829ca1dc68f2fb17ae71c4d841381c
 LINUX_EVENT_SHA256=b51ca562ec232785856c454ce4f3621d957f39d0db87919e237590b0331544ff
+# The Android bundles of the same release hold the same tor 0.4.9.13, built
+# with OpenSSL 3.5.8, libevent, zlib and zstd inside it, as tor/libTor.so: a
+# program, despite its name. Android runs a program only from an app's native
+# library folder, which takes only files named lib*.so, so the app ships it
+# there as libtor.so. Pinned on 2026-10-10 after checking each archive's
+# signature by the same key (signed by its subkey
+# 022D A248 432D 2A0E 0F54 E65E 316C 1FAC D62D 07D9).
+ARM64_ARCHIVE=tor-expert-bundle-android-aarch64-15.0.24.tar.gz
+ARM64_ARCHIVE_SHA256=2a7a02484149b05f64b582a4a1e8eb8aabb9f6cd32daca4e03c58e09839bb7a8
+ARM64_TOR_SHA256=efefd6a3ed9af009446cfef9238550ee5a016386d7b318078cce7ee83cef1d66
+ARM32_ARCHIVE=tor-expert-bundle-android-armv7-15.0.24.tar.gz
+ARM32_ARCHIVE_SHA256=9416f72b9cd31eda0f7f5a1fa3e2eec789b88b8160e20f5d690bc4ba8c29811e
+ARM32_TOR_SHA256=bfc346d388a7c897cb815f743f1b76a6707a0fe95f299ebc729d1540a22b64e0
+X64_ARCHIVE=tor-expert-bundle-android-x86_64-15.0.24.tar.gz
+X64_ARCHIVE_SHA256=500d51006f1938dfd5ecd0653b0d2a156feff8a4dc5e2b61b81793d47854fc90
+X64_TOR_SHA256=c39ea7df25ec59634e7c699ca67f4eed312916e9fc11d4517fd5d0c3076d9c15
 
 # For iPhone: Tor.framework 409.13.1 by the Guardian Project's iCepa team (the
 # library Onion Browser uses), which builds the same tor 0.4.9.13 with
@@ -44,9 +65,9 @@ else
   ok() { echo "$1  $2" | shasum -a 256 -c - >/dev/null 2>&1; }
 fi
 
-# fetch <archive> <archive sha256> <path inside archive> <file sha256>
+# fetch <archive> <archive sha256> <path inside archive> <file sha256> [file]
 fetch() {
-  file=$out/$(basename "$3")
+  file=${5:-$out/$(basename "$3")}
   ok "$4" "$file" && return
   archive=$tmp/$1
   if [ ! -f "$archive" ]; then # each archive is downloaded once per run
@@ -54,10 +75,20 @@ fetch() {
     curl -fsSL --retry 3 -o "$archive" "$BASE/$1"
     ok "$2" "$archive" || { echo "checksum mismatch: $1" >&2; exit 1; }
   fi
-  mkdir -p "$out"
+  mkdir -p "$(dirname "$file")"
   tar -xzOf "$archive" "$3" > "$file"
   ok "$4" "$file" || { rm -f "$file"; echo "checksum mismatch: $file" >&2; exit 1; }
 }
+
+if [ "${1:-}" = android ]; then
+  # Android's names for the three kinds of processor.
+  jni=android/app/src/main/jniLibs
+  fetch "$ARM64_ARCHIVE" "$ARM64_ARCHIVE_SHA256" tor/libTor.so "$ARM64_TOR_SHA256" "$jni/arm64-v8a/libtor.so"
+  fetch "$ARM32_ARCHIVE" "$ARM32_ARCHIVE_SHA256" tor/libTor.so "$ARM32_TOR_SHA256" "$jni/armeabi-v7a/libtor.so"
+  fetch "$X64_ARCHIVE" "$X64_ARCHIVE_SHA256" tor/libTor.so "$X64_TOR_SHA256" "$jni/x86_64/libtor.so"
+  echo "Tor is ready in $jni"
+  exit 0
+fi
 
 case "$(uname -s)" in
   Darwin)

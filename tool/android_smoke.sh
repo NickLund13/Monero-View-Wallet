@@ -42,12 +42,59 @@ if ! adb shell dumpsys activity activities |
   failed=1
 fi
 
+# The camera, allowed now as a person allows it at the first scan: the smoke
+# test then shows Scan wallet QR, and the camera must be on while it shows
+# and off again once it has gone.
+adb shell pm grant "$package" android.permission.CAMERA
+camera_clients() {
+  adb shell dumpsys media.camera |
+    sed -n '/Active Camera Clients:/,/^\]/p' | grep -c "$package" || true
+}
+# Waits up to 4 minutes for a line of the smoke test's report.
+reported() {
+  for _ in $(seq 120); do
+    case "$(report)" in *"$1"*) return 0 ;; esac
+    sleep 2
+  done
+  return 1
+}
+if reported 'camera view: shown'; then
+  on=
+  for _ in $(seq 20); do
+    if [ "$(camera_clients)" -gt 0 ]; then on=1 && break; fi
+    sleep 1
+  done
+  if [ -z "$on" ]; then
+    echo "::error::The camera didn't turn on for Scan wallet QR."
+    adb shell dumpsys media.camera | sed -n '/Active Camera Clients:/,/^\]/p' || true
+    failed=1
+  fi
+  # Temporary, while the camera is new: the screen, to check how the picture
+  # is turned and cut.
+  adb exec-out screencap -p > "${RUNNER_TEMP:-/tmp}/scan.png" || true
+  echo "screenshot, gzipped, in base64:"
+  gzip -9c "${RUNNER_TEMP:-/tmp}/scan.png" | base64 -w 0 || true
+  echo
+fi
+if reported 'camera view: gone'; then
+  off=
+  for _ in $(seq 20); do
+    if [ "$(camera_clients)" -eq 0 ]; then off=1 && break; fi
+    sleep 1
+  done
+  if [ -z "$off" ]; then
+    echo "::error::The camera stayed on after Scan wallet QR went."
+    failed=1
+  fi
+fi
+
 report=$(report)
 echo "$report"
 
 expected=$(printf '%s\n' 'wallet library: ok' 'folder: ok' 'keystore: ok' \
-  'saved wallet: ok' 'no tor: ok' 'first frame: ok')
-if [ "$(echo "$report" | grep -v '^file: ')" != "$expected" ]; then
+  'saved wallet: ok' 'tor: ok' 'camera: ok' 'first frame: ok' \
+  'camera view: shown' 'camera view: gone')
+if [ "$(echo "$report" | grep -v '^file: \|^tor library: ')" != "$expected" ]; then
   echo "::error::The smoke test failed on the Android emulator."
   adb logcat -d -v brief -s flutter:I ActivityTaskManager:I || true
   adb logcat -d -t 200 '*:W' || true

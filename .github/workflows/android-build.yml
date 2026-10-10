@@ -1,17 +1,20 @@
 # Builds the app for Android, signed only with a throwaway debug key, to show
-# that the Android project, the Dart code and the monero_c wallet library build
-# together. tool/check_android_apk.sh then checks the release APK: the wallet
-# library is in it for each kind of processor, its native libraries suit
-# phones with 16 KB memory pages, it asks for no permission but the internet,
-# and Android may not back it up.
+# that the Android project, the Dart code, the monero_c wallet library and the
+# Tor Project's tor build together. tool/check_android_apk.sh then checks the
+# release APK: the wallet library and tor are in it for each kind of
+# processor, its native libraries suit phones with 16 KB memory pages, it asks
+# for no permission but the internet and the camera, and Android may not back
+# it up.
 # Then it runs a smoke test on the Android emulator, on the oldest Android the
 # app supports and on a recent one, both without Google's apps or services:
 # tool/android_smoke.dart calls the wallet library with obviously fake input,
 # saves a throwaway wallet with its password in the Keystore, opens it again
-# after reading the Keystore afresh and removes it, and opens the app's first
-# screen. tool/android_smoke.sh then has Android make the app's activity anew,
-# as it does after a theme change, and checks that the app keeps running
-# without starting its Dart code again.
+# after reading the Keystore afresh and removes it, runs tor for its version,
+# calls the camera's native code and opens the app's first screen.
+# tool/android_smoke.sh then has Android make the app's activity anew, as it
+# does after a theme change, and checks that the app keeps running without
+# starting its Dart code again. Last, it allows the camera, and checks that
+# the camera is on while Scan wallet QR shows and off once it has gone.
 #
 # Gradle checks every file it downloads (the Android and Kotlin build tools,
 # the libraries Flutter's Android code uses) against the checksums in
@@ -38,7 +41,7 @@ on:
         type: boolean
         default: false
   push:
-    branches: [main]
+    branches: [main, claude/android-camera-tor-dsd9qz]
     paths:
       - android/**
       - lib/**
@@ -46,6 +49,7 @@ on:
       - pubspec.yaml
       - pubspec.lock
       - tool/fetch_monero_c.sh
+      - tool/fetch_tor.sh
       - tool/android_smoke.dart
       - tool/android_smoke.sh
       - tool/check_android_apk.sh
@@ -60,6 +64,7 @@ on:
       - pubspec.yaml
       - pubspec.lock
       - tool/fetch_monero_c.sh
+      - tool/fetch_tor.sh
       - tool/android_smoke.dart
       - tool/android_smoke.sh
       - tool/check_android_apk.sh
@@ -87,6 +92,8 @@ jobs:
       - uses: ./.github/actions/flutter-setup
       - name: Fetch the Android wallet library (pinned, checksum verified)
         run: sh tool/fetch_monero_c.sh android
+      - name: Fetch the Tor Project's Android tor (pinned, checksum verified)
+        run: sh tool/fetch_tor.sh android
       # Gradle's own wrapper jar: the checksum Gradle publishes for it.
       - name: Check the Gradle wrapper
         run: echo "7d3a4ac4de1c32b59bc6a4eb8ecb8e612ccd0cf1ae1e99f66902da64df296172  android/gradle/wrapper/gradle-wrapper.jar" | sha256sum -c -
@@ -124,6 +131,9 @@ jobs:
           api-level: 30
           target: default
           arch: x86_64
+          # A camera for the smoke test to turn on: the emulator's own moving
+          # picture, without a webcam.
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back emulated
           script: sh tool/android_smoke.sh "$RUNNER_TEMP/android_smoke.apk"
       - name: Run the smoke test on Android 15
         uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
@@ -131,4 +141,7 @@ jobs:
           api-level: 35
           target: default
           arch: x86_64
+          # A camera for the smoke test to turn on: the emulator's own moving
+          # picture, without a webcam.
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back emulated
           script: sh tool/android_smoke.sh "$RUNNER_TEMP/android_smoke.apk"
