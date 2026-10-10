@@ -23,6 +23,11 @@ entropy = 3.5
 [[rules.allowlists]]
 regexTarget = "line"
 regexes = ['''(?i)sha-?256|\.(?:ttf|zip)\b''']
+# Published test vectors, often on a line of their own after dart format: the
+# SHA-256 of "abc" and of the two-block message in FIPS 180-2, appendix B
+# (https://csrc.nist.gov/projects/cryptographic-standards-and-guidelines/example-values).
+[[rules.allowlists]]
+regexes = ['''^(?:ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad|248d6a61d20638b8e5c026930c3e6039a33ce45964ff2167f6ecedd419db06c1)$''']
 
 # ponytail: naive heuristic, English lowercase only. 24-25 words of 3+ letters
 # (legacy seed) or 16 words of 3-8 letters (polyseed), one after another on a

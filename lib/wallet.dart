@@ -493,10 +493,14 @@ class ViewWallet {
     if (rings == null) return;
     try {
       for (final entry in Directory(rings).listSync()) {
-        entry.deleteSync(recursive: true);
+        try {
+          entry.deleteSync(recursive: true);
+        } on FileSystemException {
+          // Encrypted with a key made from the view key, which is gone now.
+        }
       }
     } on FileSystemException {
-      // Encrypted with a key made from the view key, which is gone now.
+      // wallet2 never made it.
     }
   }
 

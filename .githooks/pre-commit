@@ -67,7 +67,12 @@ if ! command -v gitleaks >/dev/null 2>&1; then
   exit 1
 fi
 
-if [ -n "${CI:-}" ]; then
+if [ "${GITHUB_EVENT_NAME:-}" = pull_request ]; then
+  # Main's history and the pull request's own commits, not every branch the
+  # checkout fetched: each branch is checked in its own pull request, and the
+  # runs on main and the weekly run still scan them all.
+  gitleaks git --redact --no-banner --verbose --log-opts="--full-history HEAD" || fail=1
+elif [ -n "${CI:-}" ]; then
   gitleaks git --redact --no-banner --verbose || fail=1
 else
   gitleaks git --pre-commit --staged --redact --no-banner --verbose || fail=1
