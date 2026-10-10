@@ -49,11 +49,12 @@ fi
 
 # Recents never shows a picture of the app. Android 13 and later leave it out
 # when the app asks, which their dumpsys doesn't show; before that the app's
-# window is a secure one.
+# window is a secure one. Its flags are on the line after mAttrs=.
 if [ "$(adb shell getprop ro.build.version.sdk | tr -d '\r')" -lt 33 ]; then
   attributes=$(adb shell dumpsys window windows |
-    grep -A 40 "Window{[^}]*$package/[^}]*MainActivity}" | grep -m 1 'mAttrs=' || true)
-  case "$attributes" in
+    grep -A 40 "Window{[^}]*$package/[^}]*MainActivity}" |
+    grep -m 1 -A 3 'mAttrs=' || true)
+  case "$(echo "$attributes" | grep -m 1 ' fl=')" in
     *SECURE*) ;;
     *)
       echo "::error::Recents may show a picture of the app: its window isn't secure."
@@ -81,9 +82,9 @@ done
 adb shell locksettings clear --old "$pin" || true
 
 # Started again, the app deletes the copy of a key images file the first start
-# left behind.
+# left behind. It draws nothing then, so there is no first frame to wait for.
 adb shell am force-stop "$package"
-adb shell am start -W -n "$package/.MainActivity"
+adb shell am start -n "$package/.MainActivity"
 for _ in $(seq 30); do
   case "$(report)" in *'copy left behind: '*) break ;; esac
   sleep 2
