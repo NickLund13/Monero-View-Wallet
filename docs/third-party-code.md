@@ -68,49 +68,68 @@ ZeroMQ, expat, zlib, libiconv, ICU, liblzma, zstd, hidapi, libusb, miniupnpc.
 
 | File | Part | Version | License | In | Text from |
 | --- | --- | --- | --- | --- | --- |
-| `tor.txt` | Tor | 0.4.9.13 | BSD-3-Clause, with the notices of code bundled in Tor | iPhone and Windows | `LICENSE` in [tor-0.4.9.13.tar.gz](https://archive.torproject.org/tor-package-archive/tor-0.4.9.13.tar.gz) |
-| `tor-source.txt` | Where the source of the Windows `tor.exe` is (written for this app) | | | Windows | |
-| `libevent.txt` | libevent | 2.1.13 | BSD-3-Clause | iPhone and Windows | [LICENSE](https://raw.githubusercontent.com/libevent/libevent/release-2.1.13-stable/LICENSE) |
+| `tor.txt` | Tor | 0.4.9.13 | BSD-3-Clause, with the notices of code bundled in Tor | all | `LICENSE` in [tor-0.4.9.13.tar.gz](https://archive.torproject.org/tor-package-archive/tor-0.4.9.13.tar.gz) |
+| `tor-source.txt` | Where the source of the Windows and Android tor is (written for this app) | | | Windows and Android | |
+| `libevent.txt` | libevent | 2.1.13 | BSD-3-Clause | all | [LICENSE](https://raw.githubusercontent.com/libevent/libevent/release-2.1.13-stable/LICENSE) |
 | `liblzma.txt` | liblzma (XZ Utils) | 5.8.4 | 0BSD | iPhone | [COPYING.0BSD](https://raw.githubusercontent.com/tukaani-project/xz/v5.8.4/COPYING.0BSD) |
 | `tor-framework.txt` | Tor.framework, which built the iPhone's Tor | 409.13.1 | MIT | iPhone | [LICENSE](https://raw.githubusercontent.com/iCepa/Tor.framework/v409.13.1/LICENSE) |
-| `zlib.txt` | zlib | 1.3.2 | Zlib | Windows | [LICENSE](https://raw.githubusercontent.com/madler/zlib/v1.3.2/LICENSE) |
+| `zlib.txt` | zlib | 1.3.2 | Zlib | Windows and Android | [LICENSE](https://raw.githubusercontent.com/madler/zlib/v1.3.2/LICENSE) |
+| `zstd.txt` | Zstandard | ZSTD_VERSION | BSD-3-Clause (offered with GPL-2.0 as the other choice) | Android | [LICENSE](https://raw.githubusercontent.com/facebook/zstd/vZSTD_VERSION/LICENSE) |
 
 The iPhone's Tor is built without Tor's GPL option, so its LGPL proof-of-work
-code is not in it. The Windows `tor.exe` is the Tor Project's own build, which
-has that option on ("This build of Tor is covered by the GNU General Public
-License"), so that `tor.exe` as a whole is under the GPL-3.0. The app only
-starts it as a separate program, so this doesn't reach the app's own code. The
-iPhone build uses Apple's own zlib, which isn't shipped with the app. The
-Windows `tor.exe` has no liblzma or zstd in it, and `tor.txt`, `openssl.txt`,
+code is not in it. The Windows `tor.exe` and the Android tor are the Tor
+Project's own builds, from its Tor Expert Bundle 15.0.24 for each, which have
+that option on ("This build of Tor is covered by the GNU General Public
+License"), so each as a whole is under the GPL-3.0. The app only starts it as
+a separate program, so this doesn't reach the app's own code. The iPhone build
+uses Apple's own zlib, which isn't shipped with the app. The Windows `tor.exe`
+has no liblzma or zstd in it. The Android tor (the bundle's `tor/libTor.so`,
+one for each kind of processor, shipped as `libtor.so`) has zstd built in and
+no liblzma, as `tor --library-versions` says on the emulator (the Android
+build workflow's smoke test prints it). `tor.txt`, `openssl.txt`,
 `libevent.txt` and `zlib.txt` are byte for byte the notices the Tor Project
-ships in its bundle's `docs/` folder.
+ships in both bundles' `docs/` folder, and `zstd.txt` is the Android bundle's
+`docs/zstd-bsd.txt`. The Android bundle also has the pluggable transports
+(lyrebird, conjure) and their notices, which the app leaves out, as it does
+on Windows.
 
 ## The Android libraries
 
 In the Android build only: the Java and Kotlin libraries that Flutter's
 Android code (its embedding, `io.flutter:flutter_embedding_release`) depends
-on, which Gradle packs into the app. Found on 2026-10-10 in the release
+on, and the ones the app's own camera code (`QrCamera.kt`) uses: AndroidX
+CameraX for the camera and ZXing's core to read QR codes, with what CameraX
+depends on. Gradle packs them into the app. Found on 2026-10-10 in the release
 build's runtime classpath (`./gradlew :app:dependencies --configuration
 releaseRuntimeClasspath`, as the Android build workflow prints it when it
 writes the Gradle checksums). All are under the Apache-2.0, so they share one
 file, `android-libraries.txt`, written for this app: each part's copyright
-line, the `NOTICE` files that Kotlin and kotlinx.coroutines ship (the only
-ones of these that have one), then the license, which is
+line, the `NOTICE` files that Kotlin, kotlinx.coroutines, kotlinx.atomicfu,
+Jakarta Dependency Injection and ZXing ship (the only ones of these that have
+one), then the license, which is
 [Kotlin's LICENSE.txt](https://raw.githubusercontent.com/JetBrains/kotlin/v2.4.0/license/LICENSE.txt),
 byte for byte the Apache Software Foundation's text.
 
 | Part | Version |
 | --- | --- |
-| AndroidX: activity 1.8.1, annotation 1.8.1, annotation-experimental 1.4.0, arch core 2.2.0, collection 1.1.0, concurrent-futures 1.1.0, core 1.13.1, customview 1.0.0, exifinterface 1.4.1, fragment 1.7.1, interpolator 1.0.0, lifecycle 2.7.0, loader 1.0.0, profileinstaller 1.3.1, savedstate 1.2.1, startup 1.1.1, tracing 1.2.0, versionedparcelable 1.1.1, viewpager 1.0.0, window 1.2.0, window extensions core 1.0.0 | as listed |
-| Kotlin standard library | 2.4.0 (jdk7 and jdk8 parts 1.8.20) |
-| kotlinx.coroutines | 1.7.1 |
+| AndroidX: activity 1.8.1, annotation 1.8.1, annotation-experimental 1.4.1, arch core 2.2.0, camera (camera2, camera2-pipe, core, lifecycle and featurecombinationquery) 1.6.2, collection 1.1.0, concurrent-futures 1.1.0, core 1.13.1, core-backported-fixes 1.0.0, customview 1.0.0, exifinterface 1.4.2, fragment 1.7.1, interpolator 1.0.0, lifecycle 2.7.0, loader 1.0.0, profileinstaller 1.3.1, savedstate 1.2.1, startup 1.1.1, tracing 1.3.0, versionedparcelable 1.1.1, viewpager 1.0.0, window 1.2.0, window extensions core 1.0.0 | as listed |
+| Kotlin standard library | 2.4.0 |
+| kotlinx.coroutines | 1.9.0 |
+| kotlinx.atomicfu | 0.28.0 |
 | JetBrains Java Annotations | 23.0.0 |
 | Guava ListenableFuture | 1.0 |
 | ReLinker | 1.4.5 |
 | JSpecify | 1.0.0 |
+| Dagger (used by CameraX) | 2.59 |
+| Jakarta Dependency Injection (`jakarta.inject-api`) | 2.0.1 |
+| JSR-330 Dependency Injection (`javax.inject`) | 1 |
+| AutoValue annotations | 1.6.3 |
+| ZXing core | 3.5.4 |
 
-They change with Flutter and the Kotlin version in `android/settings.gradle.kts`:
-check this list again when either changes.
+The app asks for CameraX, ZXing and `lifecycle-process` itself, at the
+versions pinned in `android/app/build.gradle.kts`. The rest change with
+Flutter, CameraX and the Kotlin version in `android/settings.gradle.kts`:
+check this list again when any of them changes.
 
 ## The fonts
 
@@ -130,7 +149,7 @@ check this list again when either changes.
   three. The LGPL also asks that people can use the app with a changed version
   of the library. That needs a decision before the App Store: see
   [app-store.md](app-store.md#the-wallet-librarys-lgpl).
-- **The Windows `tor.exe` (GPL-3.0):** ship the GPL-3.0 text and say where its
-  source is (`tor-source.txt`); the app does both. If the Windows app is ever
-  offered for download, put the same directions next to the download as well
-  (GPL-3.0 section 6).
+- **The Windows and Android tor (GPL-3.0):** ship the GPL-3.0 text and say
+  where its source is (`tor-source.txt`); the app does both. If the Windows or
+  Android app is ever offered for download, put the same directions next to
+  the download as well (GPL-3.0 section 6).

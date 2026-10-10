@@ -79,10 +79,14 @@ if echo "$manifest" | grep -q 'android:extractNativeLibs(0x[0-9a-f]*)=false'; th
   echo "::error::Android wouldn't install the native libraries as files, so tor couldn't run."
   failed=1
 fi
-# A phone without a camera can still install the app, and type the wallet in.
+# A phone without a camera can still install the app, and type the wallet in:
+# each camera feature is there, marked not required.
 for feature in android.hardware.camera android.hardware.camera.autofocus; do
-  if ! "$tools/aapt2" dump badging "$apk" |
-    grep -q "^uses-feature-not-required: name='$feature'"; then
+  if ! echo "$manifest" | awk -v f="$feature" '
+    /E: / { feature = ($0 ~ /E: uses-feature /); named = 0; next }
+    feature && index($0, ":name(0x01010003)=\"" f "\" ") { named = 1 }
+    feature && named && /:required\(0x0101028e\)=false/ { optional = 1 }
+    END { exit !optional }'; then
     echo "::error::The app requires $feature to be installed."
     failed=1
   fi

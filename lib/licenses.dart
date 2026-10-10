@@ -37,7 +37,7 @@ enum Build {
 const allBuilds = {Build.iPhone, Build.windows, Build.android};
 
 /// In the builds that have Tor in them.
-const buildsWithTor = {Build.iPhone, Build.windows};
+const buildsWithTor = {Build.iPhone, Build.windows, Build.android};
 
 /// The app as the license list names it.
 const appName = 'Monero View Wallet';
@@ -87,23 +87,31 @@ const bundledLicenses = <(List<String>, String, Set<Build>)>[
   (['GCC runtime'], 'gpl-3.0.txt', {Build.windows}),
   // Tor and the libraries built into it (OpenSSL is listed above).
   (['Tor'], 'tor.txt', buildsWithTor),
-  // The Windows tor.exe is the Tor Project's GPL build.
-  (['Tor'], 'tor-source.txt', {Build.windows}),
-  (['Tor'], 'gpl-3.0.txt', {Build.windows}),
+  // The Windows and Android tor is the Tor Project's GPL build.
+  (['Tor'], 'tor-source.txt', {Build.windows, Build.android}),
+  (['Tor'], 'gpl-3.0.txt', {Build.windows, Build.android}),
   (['libevent'], 'libevent.txt', buildsWithTor),
   (['liblzma'], 'liblzma.txt', {Build.iPhone}),
   (['Tor.framework'], 'tor-framework.txt', {Build.iPhone}),
-  (['zlib'], 'zlib.txt', {Build.windows}),
-  // The Java and Kotlin libraries that Flutter's Android code brings along.
+  (['zlib'], 'zlib.txt', {Build.windows, Build.android}),
+  (['Zstandard'], 'zstd.txt', {Build.android}),
+  // The Java and Kotlin libraries that Flutter's Android code brings along,
+  // and the camera and the QR code reader of the app's own.
   (
     [
       'AndroidX',
       'Kotlin',
       'kotlinx.coroutines',
+      'kotlinx.atomicfu',
       'JetBrains Java Annotations',
       'Guava ListenableFuture',
       'ReLinker',
       'JSpecify',
+      'Dagger',
+      'Jakarta Dependency Injection',
+      'javax.inject',
+      'AutoValue',
+      'ZXing',
     ],
     'android-libraries.txt',
     {Build.android},

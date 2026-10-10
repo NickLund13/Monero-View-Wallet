@@ -239,6 +239,7 @@ class QrCamera :
         private var last: String? = null
 
         private var preview: Preview? = null
+        private var analysis: ImageAnalysis? = null
 
         /** The camera's request for a Surface to draw its picture in, until it has one. */
         private var request: SurfaceRequest? = null
@@ -365,6 +366,7 @@ class QrCamera :
                     )
                     .build()
             analysis.setAnalyzer(reading, ::read)
+            this.analysis = analysis
             try {
                 val camera = provider.bindToLifecycle(this, selector, preview, analysis)
                 sensorRotation = camera.cameraInfo::getSensorRotationDegrees
@@ -517,6 +519,8 @@ class QrCamera :
             displays?.unregisterDisplayListener(turned)
             request?.willNotProvideSurface()
             request = null
+            // No frame is handed to the reader any more, which then ends.
+            analysis?.clearAnalyzer()
             // CameraX lets go of this view's camera and use cases.
             registry.currentState = Lifecycle.State.DESTROYED
             reading.shutdown()
