@@ -37,7 +37,7 @@ In the iPhone build (MoneroWallet.framework) and the Windows build (the DLL).
 | `gpl-3.0.txt` | The GPL-3.0 text, which LGPL-3.0 builds on, and the app's own license | | | [COPYING3](https://raw.githubusercontent.com/gcc-mirror/gcc/releases/gcc-15.2.0/COPYING3) |
 | `lgpl-source.txt` | Where the source of the three LGPL parts is (written for this app) | | | |
 | `utf8proc.txt` | utf8proc | 2.9.0 | MIT and the Unicode data license | [LICENSE.md](https://raw.githubusercontent.com/JuliaStrings/utf8proc/3de4596fbe28956855df2ecb3c11c0bbc3535838/LICENSE.md) |
-| `bc-ur.txt` | bc-ur (MrCyjaneK's fork, for animated QR codes) | d82e7c75 | BSD-2-Clause-Patent, with BSD-3-Clause, MIT and CC0 parts | [LICENSE](https://raw.githubusercontent.com/MrCyjaneK/bc-ur/d82e7c753e710b8000706dc3383b498438795208/LICENSE) |
+| `bc-ur.txt` | bc-ur (MrCyjaneK's fork, for animated QR codes), and the app's own reader of those codes (`lib/ur.dart`), ported from its decoder | d82e7c75 | BSD-2-Clause-Patent, with BSD-3-Clause, MIT and CC0 parts | [LICENSE](https://raw.githubusercontent.com/MrCyjaneK/bc-ur/d82e7c753e710b8000706dc3383b498438795208/LICENSE) |
 | `boost.txt` | Boost | 1.90.0 | BSL-1.0 | [LICENSE_1_0.txt](https://raw.githubusercontent.com/boostorg/boost/boost-1.90.0/LICENSE_1_0.txt) |
 | `openssl.txt` | OpenSSL (also inside Tor) | 3.5.1 here, 3.6.4 in the iPhone Tor, 3.5.8 in the Windows Tor | Apache-2.0 | [LICENSE.txt](https://raw.githubusercontent.com/openssl/openssl/openssl-3.5.1/LICENSE.txt) |
 | `libsodium.txt` | libsodium | 1.0.18 (from the build recipe; the binary has no version string) | ISC | [LICENSE](https://raw.githubusercontent.com/jedisct1/libsodium/1.0.18/LICENSE) |

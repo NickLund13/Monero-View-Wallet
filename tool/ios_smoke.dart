@@ -131,11 +131,14 @@ Future<String> _tor() async {
 /// The camera's native code (ios/Runner/QrCamera.swift) answers, without
 /// asking for the camera, which nobody on the simulator could allow: the app
 /// was just installed, so the question hasn't been asked yet. Stopping a
-/// camera view that doesn't exist does nothing.
+/// camera view that doesn't exist does nothing. Key images by QR keeps the
+/// screen on, and lets it sleep again.
 Future<String> _camera() async {
   try {
     final status = await IosQrCamera.channel.invokeMethod<String>('status');
     await IosQrCamera.channel.invokeMethod<void>('stop', -1);
+    await IosQrCamera.channel.invokeMethod<void>('keepScreenOn', true);
+    await IosQrCamera.channel.invokeMethod<void>('keepScreenOn', false);
     return status == 'notDetermined' ? 'ok' : 'unexpected: $status';
   } catch (e) {
     return 'failed: $e';

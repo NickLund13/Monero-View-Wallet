@@ -36,7 +36,13 @@ wallet:
 4. **Import key images:** choose the file the Monero GUI exported. On an
    iPhone, choose it in the Files picker, or open it with this app from Files,
    the share sheet or AirDrop; the app then shows the file and imports it when
-   you tap Import this file.
+   you tap Import this file. On an iPhone, **Use QR codes** works with a
+   signing device that uses Monero's animated QR codes (Passport with Cake
+   Signer, Feather's offline signing): the app shows the wallet's outputs as
+   an animated code for the device to read, then reads the key images code it
+   shows back and imports it. The outputs are encrypted with the view key, the
+   key images code is held in memory only, and any code that might hold a
+   spend key or seed is refused. The Monero GUI can't make these codes.
 5. **Home:** the wallet's name (tap it to rename the wallet), balance,
    activity, whether the app is synced, catching up or can't reach the node,
    and a notice when outputs have no key image yet. Each payment says which
@@ -162,7 +168,7 @@ minutes of scanning at most. **Remove wallet** deletes the password, then both w
 files. A wallet whose setup stopped before "Start sync" is deleted at the next
 launch, and setup starts over.
 
-Not built yet: the rest of Settings and key images by QR.
+Not built yet: the rest of Settings.
 
 Needs [Flutter](https://docs.flutter.dev/get-started/install/windows/desktop)
 3.47.6 and Visual Studio with the "Desktop development with C++" workload.
@@ -229,8 +235,10 @@ control port as tor 0.4.9.13. It keeps Tor off the network, so the test
 contacts nothing. The Files picker, "Open in…" and AirDrop themselves need a person
 to tap through, so they wait for TestFlight to be tried on a phone.
 
-The smoke test also checks that the camera's native code answers. Scanning
-itself needs a real camera, so it waits for TestFlight too.
+The smoke test also checks that the camera's native code answers, and that it
+can keep the screen on and let it sleep again. Scanning itself, the wallet's
+QR code and the animated key images code alike, needs a real camera, so it
+waits for TestFlight too.
 
 What App Store Connect will ask when the app is submitted (encryption export,
 App Privacy, privacy manifests, the wallet library's license) is in

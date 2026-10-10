@@ -11,6 +11,7 @@ library;
 import 'dart:convert';
 import 'dart:isolate';
 
+import 'ur.dart';
 import 'wallet.dart';
 
 /// What a scanned code fills in on Setup: a view-only wallet code fills all
@@ -65,7 +66,7 @@ Future<WalletQr> readWalletQr(
       _keysProblemOffUi,
 }) async {
   // 1. Spend authority.
-  if (_carriesSpendAuthority(text)) throw RefusedCode(Refusal.spendKey);
+  if (carriesSpendAuthority(text)) throw RefusedCode(Refusal.spendKey);
 
   // 2. One of the formats.
   final trimmed = text.trim();
@@ -179,10 +180,15 @@ String _decoded(String text) {
   }
 }
 
-bool _carriesSpendAuthority(String text) {
+/// True if [text] might carry a spend key or seed: a run of a dozen or more
+/// words, a parameter or JSON field named for one, or a UR code of a seed.
+/// Every QR code the app scans is checked with it first.
+bool carriesSpendAuthority(String text) {
   if (_wordRun.hasMatch(text) || _wordRun.hasMatch(_decoded(text))) {
     return true;
   }
+  // A UR code's type, such as crypto-seed.
+  if (urType(text) case final type? when _spendName(type)) return true;
   // The names of every parameter after the first ?, whatever the scheme.
   final query = text.indexOf('?');
   if (query >= 0) {

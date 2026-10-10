@@ -2,14 +2,16 @@ import AVFoundation
 import Flutter
 import UIKit
 
-/// The camera for Scan wallet QR (lib/scan_screen.dart is the other end of the
-/// channel). Apple's own AVFoundation reads QR codes on the iPhone: no
-/// scanning library, nothing sent anywhere.
+/// The camera for Scan wallet QR and Key images by QR (lib/scan_screen.dart is
+/// the other end of the channel). Apple's own AVFoundation reads QR codes on
+/// the iPhone: no scanning library, nothing sent anywhere.
 ///
 /// Each camera view on the Dart side is a platform view with a capture
 /// session of its own, which runs from the moment the view is made until it
-/// reads one code or the Dart side takes the view away. The picture is only
-/// ever shown on screen, never saved, and no code's text is logged.
+/// reads one code or the Dart side takes the view away. A view for an
+/// animated code keeps reading, and hands over each part as it appears. The
+/// picture is only ever shown on screen, never saved, and no code's text is
+/// logged.
 final class QrCamera: NSObject, FlutterPlugin {
   static func register(with registrar: FlutterPluginRegistrar) {
     let channel = FlutterMethodChannel(
@@ -44,6 +46,12 @@ final class QrCamera: NSObject, FlutterPlugin {
         QrCameraView.views.object(forKey: NSNumber(value: id))?.stop()
       }
       result(nil)
+    case "keepScreenOn":
+      // While the app shows an animated code to another device's camera, or
+      // reads one: the screen doesn't dim or lock. iOS applies it only while
+      // the app is in front.
+      UIApplication.shared.isIdleTimerDisabled = call.arguments as? Bool ?? false
+      result(nil)
     default:
       result(FlutterMethodNotImplemented)
     }
@@ -68,10 +76,16 @@ final class QrCameraViewFactory: NSObject, FlutterPlatformViewFactory {
     super.init()
   }
 
+  /// The Dart side says whether the view reads an animated code.
+  func createArgsCodec() -> FlutterMessageCodec & NSObjectProtocol {
+    FlutterStandardMessageCodec.sharedInstance()
+  }
+
   func create(
     withFrame frame: CGRect, viewIdentifier viewId: Int64, arguments args: Any?
   ) -> FlutterPlatformView {
-    QrCameraView(frame: frame, id: viewId, channel: channel)
+    let animated = (args as? [String: Any])?["animated"] as? Bool ?? false
+    return QrCameraView(frame: frame, id: viewId, channel: channel, animated: animated)
   }
 }
 
@@ -90,14 +104,21 @@ final class QrCameraView: NSObject, FlutterPlatformView {
   private let queue = DispatchQueue(label: "monero_view_wallet.camera")
   private let id: Int64
   private let channel: FlutterMethodChannel
-  /// True once a code was read or the view was stopped: nothing more is
-  /// handed over.
+  /// True for an animated code: every part read goes over, and the camera
+  /// keeps reading until the Dart side stops it.
+  private let animated: Bool
+  /// The part last handed over, while reading an animated code. Each frame
+  /// the camera sees reads the part again; it goes over once.
+  private var last: String?
+  /// True once a code was read (not for an animated code) or the view was
+  /// stopped: nothing more is handed over.
   private var done = false
 
-  init(frame: CGRect, id: Int64, channel: FlutterMethodChannel) {
+  init(frame: CGRect, id: Int64, channel: FlutterMethodChannel, animated: Bool) {
     preview = CameraPreview(frame: frame)
     self.id = id
     self.channel = channel
+    self.animated = animated
     super.init()
     reader.view = self
     QrCameraView.views.setObject(self, forKey: NSNumber(value: id))
@@ -155,19 +176,26 @@ final class QrCameraView: NSObject, FlutterPlatformView {
 
   func stop() {
     done = true
+    last = nil
     QrCameraView.views.removeObject(forKey: NSNumber(value: id))
     let session = self.session
     queue.async { QrCameraView.tearDown(session) }
   }
 
-  /// The first code read goes to the Dart side, on the main queue.
+  /// The first code read goes to the Dart side, on the main queue, or for an
+  /// animated code each new part.
   fileprivate func read(_ metadataObjects: [AVMetadataObject]) {
     guard !done,
       let text = metadataObjects.lazy
         .compactMap({ ($0 as? AVMetadataMachineReadableCodeObject)?.stringValue }).first
     else { return }
-    // One code per view: the camera stops at once.
-    stop()
+    if animated {
+      guard text != last else { return }
+      last = text
+    } else {
+      // One code per view: the camera stops at once.
+      stop()
+    }
     channel.invokeMethod("code", arguments: ["view": id, "text": text])
   }
 }

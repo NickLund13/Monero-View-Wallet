@@ -212,6 +212,21 @@ class Transfer {
 /// How many of the wallet's outputs are spent or still lack a key image.
 typedef Outputs = ({int total, int spent, int withoutKeyImage});
 
+/// The wallet's outputs as animated QR codes, see [ViewWallet.outputsQr]:
+/// the parts of the code of the [freshCount] outputs from the first one
+/// without a key image on, and of all [count].
+typedef OutputsQr = ({
+  List<String> fresh,
+  int freshCount,
+  List<String> all,
+  int count,
+});
+
+/// How many bytes of a message each part of an animated QR code the app shows
+/// carries: the wallet library's default, which Cake Wallet uses too. A part
+/// then fits in a QR code a phone reads easily off a screen.
+const qrFragmentLength = 130;
+
 // ponytail: the getters below read wallet2 while its sync thread may be
 // writing, and the subaddress calls write to it (also while [save] reads it),
 // as Cake Wallet and the Monero GUI do. If that ever crashes, route them
@@ -723,6 +738,17 @@ class ViewWallet {
         WalletException('Bad key image export file magic: not read'),
       );
     }
+    return _importKeyImages((w) => w.importKeyImages(path));
+  }
+
+  /// Imports the key images a signing device showed as an animated QR code,
+  /// given as one UR code of type xmr-keyimage (UrReader.asOneCode in
+  /// lib/ur.dart): what a key images file holds, so it is imported the same
+  /// way as with [importKeyImages].
+  Future<void> importKeyImagesQr(String code) =>
+      _importKeyImages((w) => w.importKeyImagesUR(code));
+
+  Future<void> _importKeyImages(bool Function(Wallet2Wallet wallet) import) {
     final syncing = _node != null;
     return _inTurn((w) {
       if (syncing) {
@@ -734,9 +760,57 @@ class ViewWallet {
       final wasTrusted = w.trustedDaemon();
       w.setTrustedDaemon(arg: true);
       try {
-        if (!w.importKeyImages(path)) throw WalletException(w.errorString());
+        if (!import(w)) throw WalletException(w.errorString());
       } finally {
         w.setTrustedDaemon(arg: wasTrusted);
+        if (syncing) w.startRefresh();
+      }
+    });
+  }
+
+  /// The wallet's outputs as the parts of an animated QR code (UR type
+  /// xmr-output), for a signing device that holds the spend key to work out
+  /// their key images: in [OutputsQr.fresh] from the first output without a
+  /// key image on, as a device that signed for this wallet before needs
+  /// them, and in [OutputsQr.all] every one, for a device that hasn't. wallet2
+  /// encrypts them with the view key, so only a device that has it can read
+  /// them.
+  Future<OutputsQr> outputsQr() {
+    final syncing = _node != null;
+    return _inTurn((w) {
+      // Keep the sync thread out of the outputs; see importKeyImages.
+      if (syncing) {
+        w.pauseRefresh();
+        w.refresh();
+      }
+      try {
+        List<String> parts({required bool all}) {
+          // Each part on a line of its own; empty only if the export failed.
+          final text = w.exportOutputsUR(
+            max_fragment_length: qrFragmentLength,
+            all: all,
+          );
+          final parts = [
+            for (final part in text.split('\n'))
+              if (part.isNotEmpty) part,
+          ];
+          if (parts.isEmpty) throw WalletException(w.errorString());
+          return parts;
+        }
+
+        final coins = w.coins()..refresh();
+        final count = coins.count();
+        var first = 0;
+        while (first < count && coins.coin(first).keyImageKnown()) {
+          first++;
+        }
+        return (
+          fresh: parts(all: false),
+          freshCount: count - first,
+          all: parts(all: true),
+          count: count,
+        );
+      } finally {
         if (syncing) w.startRefresh();
       }
     });

@@ -1,8 +1,8 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:qr/qr.dart';
 
+import 'qr_tile.dart';
 import 'secret_guard.dart';
 import 'session.dart';
 import 'ui.dart';
@@ -142,7 +142,7 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
               ),
             ),
           const SizedBox(height: 16),
-          Center(child: _QrTile(_address)),
+          Center(child: QrTile(_address, label: 'QR code of the subaddress')),
           const SizedBox(height: 16),
           Center(
             child: ConstrainedBox(
@@ -238,70 +238,4 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
     minimumSize: const Size.fromHeight(48),
     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
   );
-}
-
-/// QR codes are dark on white in both themes, since that is what scanners
-/// read best.
-const _qrDark = Color(0xFF141414);
-
-/// The address as a QR code, made on the device.
-class _QrTile extends StatelessWidget {
-  const _QrTile(this.data);
-
-  final String data;
-
-  @override
-  Widget build(BuildContext context) => Semantics(
-    image: true,
-    label: 'QR code of the subaddress',
-    child: Container(
-      width: 236,
-      height: 236,
-      // About 4 modules of white around the code, as QR readers expect.
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: const Color(0xFFFFFFFF),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: context.colors.border),
-      ),
-      child: CustomPaint(painter: _QrPainter(data)),
-    ),
-  );
-}
-
-class _QrPainter extends CustomPainter {
-  _QrPainter(this.data)
-    : _qr = QrImage(
-        QrCode(
-          payload: QrPayload.fromString(data),
-          errorCorrectLevel: QrErrorCorrectLevel.medium,
-        ),
-      );
-
-  final String data;
-  final QrImage _qr;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final n = _qr.moduleCount;
-    final module = size.shortestSide / n;
-    final dark = Path();
-    for (var y = 0; y < n; y++) {
-      for (var x = 0; x < n; x++) {
-        if (_qr.isDark(y, x)) {
-          dark.addRect(Rect.fromLTWH(x * module, y * module, module, module));
-        }
-      }
-    }
-    // Without anti-aliasing, neighbouring modules meet with no hairline gap.
-    canvas.drawPath(
-      dark,
-      Paint()
-        ..color = _qrDark
-        ..isAntiAlias = false,
-    );
-  }
-
-  @override
-  bool shouldRepaint(_QrPainter old) => old.data != data;
 }
