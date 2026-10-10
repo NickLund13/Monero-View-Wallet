@@ -2,16 +2,21 @@
 # that the Android project, the Dart code and the monero_c wallet library build
 # together. tool/check_android_apk.sh then checks the release APK: the wallet
 # library is in it for each kind of processor, its native libraries suit
-# phones with 16 KB memory pages, it asks for no permission but the internet,
-# and Android may not back it up.
+# phones with 16 KB memory pages, it asks for no permission but the internet
+# and the lock's fingerprint or face check, and Android may not back it up.
 # Then it runs a smoke test on the Android emulator, on the oldest Android the
 # app supports and on a recent one, both without Google's apps or services:
 # tool/android_smoke.dart calls the wallet library with obviously fake input,
 # saves a throwaway wallet with its password in the Keystore, opens it again
-# after reading the Keystore afresh and removes it, and opens the app's first
-# screen. tool/android_smoke.sh then has Android make the app's activity anew,
-# as it does after a theme change, and checks that the app keeps running
-# without starting its Dart code again.
+# after reading the Keystore afresh and removes it, checks that the app's
+# native code for key images files and the lock answers, and opens the app's
+# first screen. tool/android_smoke.sh then has Android make the app's activity
+# anew, as it does after a theme change, and checks that the app keeps running
+# without starting its Dart code again. It checks that on Android 11 Recents
+# can't show a picture of the app, sets a made-up PIN as the emulator's screen
+# lock and enters it in Android's prompt when the lock asks for it, and starts
+# the app again to check that the copy of a key images file left behind is
+# deleted.
 #
 # Gradle checks every file it downloads (the Android and Kotlin build tools,
 # the libraries Flutter's Android code uses) against the checksums in

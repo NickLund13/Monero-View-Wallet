@@ -227,8 +227,10 @@ class _KeyImagesScreenState extends State<KeyImagesScreen> {
   }
 
   /// Asks for a file; null if the picker was cancelled. The iPhone's Files
-  /// sheet stays above the lock screen, so a file picked there after the app
-  /// locked is dropped: nothing is imported without Face ID.
+  /// sheet stays above the lock screen, and Android's picker is another app's
+  /// screen, so a file picked there after the app locked is dropped: nothing
+  /// is imported without Face ID, or Android's fingerprint, face or screen
+  /// lock.
   Future<KeyImagesFile?> _pick() async {
     setState(() => _choosing = true);
     try {
@@ -299,13 +301,21 @@ class _KeyImagesScreenState extends State<KeyImagesScreen> {
       final last = s.lastImport;
       final busy = _choosing || _file != null || s.importing;
       final received = _received;
-      final howToMove = defaultTargetPlatform == TargetPlatform.iOS
-          ? '2. Get the file onto this iPhone, for example by AirDrop or '
-                'iCloud Drive.\n'
-                '3. Choose it here, or open it with this app from Files or '
-                'the share sheet.'
-          : '2. Save the file where this device can reach it.\n'
-                '3. Choose it here.';
+      final howToMove = switch (defaultTargetPlatform) {
+        TargetPlatform.iOS =>
+          '2. Get the file onto this iPhone, for example by AirDrop or '
+              'iCloud Drive.\n'
+              '3. Choose it here, or open it with this app from Files or '
+              'the share sheet.',
+        TargetPlatform.android =>
+          '2. Get the file onto this phone, for example by USB cable or a '
+              'cloud drive.\n'
+              '3. Choose it here, or open it with this app from Files, or '
+              'share it to this app.',
+        _ =>
+          '2. Save the file where this device can reach it.\n'
+              '3. Choose it here.',
+      };
       return PopScope(
         canPop: !busy,
         child: Screen(

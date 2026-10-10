@@ -1,17 +1,23 @@
-/// Screen 11 of the design: the lock. With a wallet on the iPhone, the app
-/// opens locked, and locks again when it comes back after [lockAfter] or more
-/// in the background. Face ID, Touch ID or the iPhone's passcode unlocks it.
+/// Screen 11 of the design: the lock. With a wallet on the iPhone or an
+/// Android phone, the app opens locked, and locks again when it comes back
+/// after [lockAfter] or more in the background. Face ID, Touch ID or the
+/// iPhone's passcode unlocks it; on Android the phone's fingerprint or face,
+/// or its screen lock.
 ///
-/// The checks are Apple's own (LocalAuthentication, called from
-/// ios/Runner/AppDelegate.swift): the app never sees a face, a fingerprint or
-/// the passcode, only whether the check passed. The lock hides the balance and
-/// history; it doesn't encrypt anything. The wallet's files are encrypted with
-/// a password the Keychain only gives out while the iPhone is unlocked.
+/// The checks are the phone's own: Apple's LocalAuthentication, called from
+/// ios/Runner/AppDelegate.swift, and Android's BiometricPrompt, called from
+/// android/app/src/main/kotlin/com/example/monero_view_wallet/AppLock.kt. The
+/// app never sees a face, a fingerprint, the passcode or the screen lock, only
+/// whether the check passed. The lock hides the balance and history; it
+/// doesn't encrypt anything. On the iPhone the wallet's files are encrypted
+/// with a password the Keychain only gives out while the iPhone is unlocked.
 ///
-/// The Runner also covers the app whenever it isn't active, so the app
-/// switcher's snapshot of it is blank, locked or not. The cover stays on when
-/// the app is back in front until the app has drawn itself as it is now, so
-/// the balance from before it went away never shows, not even for a frame.
+/// The Runner also covers the app whenever it isn't active on the iPhone, and
+/// whenever it is out of sight on Android, where Recents never shows a picture
+/// of it either: locked or not, the app switcher shows nothing of the wallet.
+/// The cover stays on when the app is back in front until the app has drawn
+/// itself as it is now, so the balance from before it went away never shows,
+/// not even for a frame.
 library;
 
 import 'dart:async';
@@ -36,28 +42,62 @@ enum Unlock {
 
   /// Nothing: an iPhone with no passcode, where the app can't lock, or a build
   /// that can't ask (the Windows test build).
-  none('Face ID');
+  none('Face ID'),
 
-  const Unlock(this.label);
+  /// On Android: the phone's fingerprint, or its face, or either on a phone
+  /// that has both, when Android counts it as strong (Class 3) and one is set
+  /// up.
+  fingerprint('Fingerprint', android: true),
+  face('Face unlock', android: true),
+  fingerprintOrFace('Fingerprint or face', android: true),
+
+  /// On Android: the screen lock only (a PIN, pattern or password).
+  screenLock('Screen lock', android: true),
+
+  /// On Android: nothing, on a phone with no screen lock.
+  noScreenLock('Screen lock', android: true);
+
+  const Unlock(this.label, {this.android = false});
+
+  /// As a title: "Face ID to open".
   final String label;
+  final bool android;
+
+  /// Within a sentence: "Unlock with Face ID", "Unlock with fingerprint".
+  String get inSentence => android ? label.toLowerCase() : label;
+
+  /// Face ID, Touch ID, or Android's fingerprint or face: asked for first,
+  /// with the passcode or screen lock to fall back on.
+  bool get biometric => switch (this) {
+    faceId || touchId || fingerprint || face || fingerprintOrFace => true,
+    _ => false,
+  };
+
+  /// The app can't lock with it.
+  bool get nothing => this == none || this == noScreenLock;
+
+  /// What the lock falls back on: the iPhone's passcode, or Android's screen
+  /// lock.
+  String get fallback => android ? 'screen lock' : 'passcode';
 }
 
 /// The answer to one check.
 enum CheckResult {
   ok,
 
-  /// The person, or iOS, closed the check. Nothing to say about it.
+  /// The person, or the phone, closed the check. Nothing to say about it.
   cancelled,
   failed,
 
-  /// Face ID or Touch ID is off after too many failed tries, until the
-  /// passcode is entered.
+  /// Face ID or Touch ID, or Android's fingerprint or face, is off after too
+  /// many failed tries, until the passcode or screen lock is entered.
   lockedOut,
 
-  /// Face ID or Touch ID is not set up, or turned off for this app.
+  /// Face ID or Touch ID is not set up, or turned off for this app; or
+  /// Android's fingerprint or face isn't set up any more.
   unavailable,
 
-  /// The iPhone has no passcode any more.
+  /// The iPhone has no passcode any more, or the Android phone no screen lock.
   noPasscode,
 }
 
@@ -65,14 +105,16 @@ enum CheckResult {
 abstract interface class OwnerCheck {
   Future<Unlock> kind();
 
-  /// Face ID or Touch ID, or with [passcode] the passcode (where iOS first
-  /// tries Face ID or Touch ID if it can). [reason] is shown with the check.
+  /// Face ID or Touch ID (on Android the fingerprint or face), or with
+  /// [passcode] the passcode or screen lock, where the phone first tries the
+  /// face or fingerprint if it can. [reason] is shown with the check.
   Future<CheckResult> ask({required String reason, required bool passcode});
 }
 
-/// The iPhone's check, through the Runner (ios/Runner/AppDelegate.swift).
-class IosOwnerCheck implements OwnerCheck {
-  const IosOwnerCheck();
+/// The phone's check, through the Runner: ios/Runner/AppDelegate.swift on the
+/// iPhone, AppLock.kt on Android.
+class PhoneOwnerCheck implements OwnerCheck {
+  const PhoneOwnerCheck();
 
   static const _channel = MethodChannel('monero_view_wallet/lock');
 
@@ -82,7 +124,12 @@ class IosOwnerCheck implements OwnerCheck {
         'faceID' => Unlock.faceId,
         'touchID' => Unlock.touchId,
         'none' => Unlock.none,
-        _ => Unlock.passcode,
+        'fingerprint' => Unlock.fingerprint,
+        'face' => Unlock.face,
+        'biometric' => Unlock.fingerprintOrFace,
+        'screenLock' => Unlock.screenLock,
+        'noScreenLock' => Unlock.noScreenLock,
+        _ => Platform.isAndroid ? Unlock.screenLock : Unlock.passcode,
       };
 
   @override
@@ -119,17 +166,17 @@ class NoOwnerCheck implements OwnerCheck {
 /// Whether the app is locked, and when it locks. [LockGate] shows it.
 class AppLock extends ChangeNotifier {
   /// The device's check. A test puts a stand-in here.
-  OwnerCheck check = Platform.isIOS
-      ? const IosOwnerCheck()
+  OwnerCheck check = Platform.isIOS || Platform.isAndroid
+      ? const PhoneOwnerCheck()
       : const NoOwnerCheck();
 
   /// The time now. A test can move it on.
   DateTime Function() now = DateTime.now;
 
-  /// Takes the Runner's cover off the app (ios/Runner/AppDelegate.swift). A
-  /// test puts a stand-in here.
-  Future<void> Function() uncover = Platform.isIOS
-      ? () => IosOwnerCheck._channel.invokeMethod<void>('uncover')
+  /// Takes the Runner's cover off the app (ios/Runner/AppDelegate.swift,
+  /// AppLock.kt on Android). A test puts a stand-in here.
+  Future<void> Function() uncover = Platform.isIOS || Platform.isAndroid
+      ? () => PhoneOwnerCheck._channel.invokeMethod<void>('uncover')
       : () async {};
 
   /// What the device unlocks with, as of the last check.
@@ -145,7 +192,7 @@ class AppLock extends ChangeNotifier {
 
   bool _on = false;
 
-  bool get canLock => kind != Unlock.none;
+  bool get canLock => !kind.nothing;
 
   /// The lock screen is up, and the rest of the app hidden.
   bool get locked => _locked;
@@ -170,7 +217,7 @@ class AppLock extends ChangeNotifier {
     } on Exception {
       // Can't tell: lock all the same, and still let the app start. The lock
       // screen asks again when the owner taps Unlock.
-      kind = Unlock.passcode;
+      kind = Platform.isAndroid ? Unlock.screenLock : Unlock.passcode;
     }
     _on = on;
     if (on && canLock) _lock();
@@ -186,7 +233,10 @@ class AppLock extends ChangeNotifier {
   }
 
   /// Follows the app into and out of the background. Coming back starts with
-  /// "inactive", before the app is shown, so the lock is up by then.
+  /// "inactive", while the Runner's cover is still on, so the lock is up by
+  /// the time the app shows. On Android a new activity for the app that is
+  /// already running goes from "detached" straight to "resumed", under the
+  /// cover too.
   void lifecycleChanged(AppLifecycleState state) {
     switch (state) {
       case AppLifecycleState.hidden:
@@ -221,15 +271,15 @@ class AppLock extends ChangeNotifier {
   }
 
   /// Starts the check once each time the lock screen comes up, so it takes no
-  /// tap. Only while the app is in front: iOS refuses a check behind it.
+  /// tap. Only while the app is in front: the phone refuses a check behind it.
   void askIfDue() {
     if (!locked || !_askWhenShown) return;
     _askWhenShown = false;
     unlock();
   }
 
-  /// Asks for Face ID or Touch ID, or with [passcode] the passcode, and
-  /// unlocks if it passes.
+  /// Asks for Face ID or Touch ID (on Android the fingerprint or face), or
+  /// with [passcode] the passcode or screen lock, and unlocks if it passes.
   Future<void> unlock({bool passcode = false}) async {
     if (!locked || asking) return;
     _asking = true;
@@ -238,32 +288,35 @@ class AppLock extends ChangeNotifier {
     try {
       // Face ID can be turned off, or locked out, while the app is away.
       kind = await check.kind();
-      final withPasscode = passcode || kind == Unlock.passcode;
-      final result = kind == Unlock.none
+      final withPasscode = passcode || !kind.biometric;
+      final result = kind.nothing
           ? CheckResult.noPasscode
           : await check.ask(
               reason: 'Unlock your wallet',
               passcode: withPasscode,
             );
       final face = kind.label;
+      final fallback = kind.fallback;
       switch (result) {
         case CheckResult.ok:
           _locked = false;
-        // Only the owner can take the passcode off an iPhone, and without
-        // one there is nothing to check with: don't shut them out.
+        // Only the owner can take the passcode off an iPhone, or the screen
+        // lock off an Android phone, and without one there is nothing to
+        // check with: don't shut them out.
         case CheckResult.noPasscode:
-          kind = Unlock.none;
+          kind = kind.android ? Unlock.noScreenLock : Unlock.none;
           _locked = false;
         case CheckResult.cancelled:
           break;
         case CheckResult.failed:
           _problem = withPasscode
               ? "That didn't unlock it. Try again."
-              : "$face didn't recognise you. Try again, or use your passcode.";
+              : "$face didn't recognise you. Try again, or use your "
+                    '$fallback.';
         case CheckResult.lockedOut:
-          _problem = '$face is off after too many tries. Use your passcode.';
+          _problem = '$face is off after too many tries. Use your $fallback.';
         case CheckResult.unavailable:
-          _problem = "$face isn't available. Use your passcode.";
+          _problem = "$face isn't available. Use your $fallback.";
       }
     } on Exception {
       _problem = "The check didn't start. Try again.";
@@ -362,7 +415,7 @@ class LockScreen extends StatelessWidget {
   Widget _screen(BuildContext context) {
     final c = context.colors;
     final lock = appLock;
-    final biometric = lock.kind == Unlock.faceId || lock.kind == Unlock.touchId;
+    final biometric = lock.kind.biometric;
     final problem = lock.problem;
     return Scaffold(
       body: SafeArea(
@@ -414,14 +467,15 @@ class LockScreen extends StatelessWidget {
               FilledButton.icon(
                 onPressed: lock.asking ? null : lock.unlock,
                 icon: Icon(switch (lock.kind) {
-                  Unlock.faceId => Icons.face_unlock_outlined,
-                  Unlock.touchId => Icons.fingerprint,
+                  Unlock.faceId || Unlock.face => Icons.face_unlock_outlined,
+                  Unlock.touchId ||
+                  Unlock.fingerprint ||
+                  Unlock.fingerprintOrFace => Icons.fingerprint,
                   _ => Icons.dialpad,
                 }, size: 20),
                 label: Text(
-                  biometric
-                      ? 'Unlock with ${lock.kind.label}'
-                      : 'Unlock with passcode',
+                  'Unlock with '
+                  '${biometric ? lock.kind.inSentence : lock.kind.fallback}',
                 ),
               ),
               const SizedBox(height: 8),
@@ -430,7 +484,7 @@ class LockScreen extends StatelessWidget {
                   onPressed: lock.asking
                       ? null
                       : () => lock.unlock(passcode: true),
-                  child: const Text('Use passcode'),
+                  child: Text('Use ${lock.kind.fallback}'),
                 )
               else
                 const SizedBox(height: 44),

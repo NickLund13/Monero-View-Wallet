@@ -76,8 +76,8 @@ class _HomeScreenState extends State<HomeScreen> {
     setState(() {});
   }
 
-  /// A key images file opened with the app, from Files, the share sheet or
-  /// AirDrop, goes to Import key images. That screen asks before importing it,
+  /// A key images file opened with the app, from Files, the share sheet,
+  /// AirDrop or another Android app, goes to Import key images. That screen asks before importing it,
   /// and waits for the first scan to finish.
   void _onReceived() {
     if (mounted && !_keyImagesOpen && receivedKeyImagesFile.value != null) {
