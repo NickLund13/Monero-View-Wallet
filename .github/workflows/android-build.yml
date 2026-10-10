@@ -41,7 +41,7 @@ on:
         type: boolean
         default: false
   push:
-    branches: [main, claude/android-camera-tor-dsd9qz]
+    branches: [main]
     paths:
       - android/**
       - lib/**

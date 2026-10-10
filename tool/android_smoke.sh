@@ -47,10 +47,19 @@ fi
 # and off again once it has gone.
 adb shell pm grant "$package" android.permission.CAMERA
 # How many of the emulator's cameras the app has open now: for each open
-# camera, Android's camera service names the package that opened it.
+# camera, Android's camera service names the package that opened it. Newer
+# Androids also keep the last session of a camera that has closed, after the
+# line saying it is closed.
 camera_clients() {
-  adb shell dumpsys media.camera | grep -A4 'is open. Client instance dump' |
-    grep -c "Client package: $package" || true
+  adb shell dumpsys media.camera | tr -d '\r' | awk -v package="$package" '
+    /Device [^ ]+ is (open|closed)/ {
+      for (i = 1; i < NF; i++) if ($i == "Device") device = $(i + 1)
+      if ($0 ~ /is closed/) closed[device] = 1
+      opened = ($0 ~ /is open/)
+      next
+    }
+    opened && /Client package:/ { if ($NF == package) mine[device] = 1; opened = 0 }
+    END { n = 0; for (d in mine) if (!(d in closed)) n++; print n }'
 }
 camera_state() {
   adb shell dumpsys media.camera |
@@ -75,14 +84,6 @@ if reported 'camera view: shown'; then
     camera_state
     failed=1
   fi
-  # Temporary, while the camera is new: the screen, to check how the picture
-  # is turned and cut.
-  adb exec-out screencap -p > "${RUNNER_TEMP:-/tmp}/scan.png" || true
-  echo "screenshot, gzipped, in base64:"
-  gzip -9c "${RUNNER_TEMP:-/tmp}/scan.png" | base64 -w 0 || true
-  echo
-  echo "camera state while shown:"
-  camera_state
 fi
 if reported 'camera view: gone'; then
   off=
