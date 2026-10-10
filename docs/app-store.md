@@ -5,8 +5,7 @@ already has in place. Written on 2026-10-09; Apple's forms change wording
 over time, so answer the substance. None of this is legal advice.
 
 Still to do before submitting: the real bundle id (now the
-`com.example.moneroViewWallet` placeholder), signing, and GitHub Pages turned
-on for the privacy policy and support page (see [App Privacy](#app-privacy)).
+`com.example.moneroViewWallet` placeholder) and signing.
 
 ## Export compliance (encryption)
 
@@ -70,9 +69,10 @@ in the app, easy to find (App Review Guideline 5.1.1(i)). The app shows the
 same text, built into the app so reading it contacts nothing, under Settings →
 About → Privacy policy and from a link on Setup; a test checks the two copies
 match. GitHub Pages publishes it with a short home page from `docs/`
-(`_config.yml` keeps the rest of the folder out), once it is turned on under
-Settings → Pages (deploy from the main branch, `/docs`). App Store Connect then
-gets https://nicklund13.github.io/Monero-View-Wallet/privacy-policy.html as the Privacy Policy URL and https://nicklund13.github.io/Monero-View-Wallet/ as the
+(Settings → Pages deploys the main branch's `/docs`; `_config.yml` keeps the
+rest of the folder out). App Store Connect gets
+https://nicklund13.github.io/Monero-View-Wallet/privacy-policy.html as the
+Privacy Policy URL and https://nicklund13.github.io/Monero-View-Wallet/ as the
 Support URL. Keep the policy in step with the app: a change to what
 the app keeps or sends changes the policy in the same pull request (the PR
 checklist asks).
