@@ -29,6 +29,10 @@ const _lockNote = 'mvw.lock';
 const _nameNote = 'mvw.name';
 const _speedNote = 'mvw.speedTest';
 
+/// What Last import says key images scanned by QR came from, in place of a
+/// file's name.
+const byQr = 'Signing device, by QR';
+
 class KeyImageImport {
   KeyImageImport({
     required this.at,
@@ -37,6 +41,8 @@ class KeyImageImport {
     required this.outputs,
   });
   final DateTime at;
+
+  /// The key images file's name, or [byQr].
   final String fileName;
   final int newlySpent;
 
@@ -275,16 +281,34 @@ class WalletSession extends ChangeNotifier {
   }
 
   /// Throws [WalletException] if the wallet refuses the file.
-  Future<void> importKeyImages(String path) async {
+  Future<void> importKeyImages(String path) => _importKeyImages(
+    () => wallet.importKeyImages(path),
+    from: path.split(RegExp(r'[/\\]')).last,
+  );
+
+  /// The wallet's outputs as an animated QR code, for a signing device. See
+  /// ViewWallet.outputsQr.
+  Future<OutputsQr> outputsQr() => wallet.outputsQr();
+
+  /// Imports the key images a signing device showed as an animated QR code,
+  /// given as one UR code (see ViewWallet.importKeyImagesQr). Throws
+  /// [WalletException] if the wallet refuses them.
+  Future<void> importScannedKeyImages(String code) =>
+      _importKeyImages(() => wallet.importKeyImagesQr(code), from: byQr);
+
+  Future<void> _importKeyImages(
+    Future<void> Function() import, {
+    required String from,
+  }) async {
     importing = true;
     notifyListeners();
     try {
       final before = wallet.outputs;
-      await wallet.importKeyImages(path);
+      await import();
       final after = wallet.outputs;
       lastImport = KeyImageImport(
         at: DateTime.now(),
-        fileName: path.split(RegExp(r'[/\\]')).last,
+        fileName: from,
         newlySpent: after.spent - before.spent,
         outputs: after,
       );

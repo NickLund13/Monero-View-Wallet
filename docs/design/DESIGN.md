@@ -245,10 +245,8 @@ code is stored exactly like a typed one (Keychain only). The scanner decodes
 on the phone with Apple's own AVFoundation (`AVCaptureMetadataOutput`, in
 `ios/Runner/QrCamera.swift`), with no scanning library and not with Google ML
 Kit, whose terms say it sends usage metrics to Google. The iOS camera
-permission text: "Scans your view-only wallet QR code. The picture stays on
-this iPhone." When Key images by QR is built, it becomes "Scans your
-view-only wallet and key image QR codes. The picture stays on this
-iPhone."
+permission text: "Scans your view-only wallet and key image QR codes. The
+picture stays on this iPhone."
 
 The camera frame is near-black in both themes (`#050506` dark, `#1A1B1E`
 light), with grey `#8A8C93` text while the camera is off ("Checking the
@@ -336,6 +334,35 @@ typed.
   goes back.
 - Footer: the Monero GUI can't make these codes; use the file import for it.
 - monero_c already exposes `exportOutputsUR` and `importKeyImagesUR`.
+
+**Built** (`lib/key_images_qr_screen.dart`), on iPhone only, where the card
+shows. Step 1 waits for sync to catch up, then shows monero_c's
+`exportOutputsUR` parts (130 bytes of message each, Cake Wallet's size) five
+a second in a 296-point tile with low error correction, "part N of M · screen
+stays on" and how many outputs it holds. By default it holds the outputs from
+the first one without a key image, as wallet2 exports them for a device that
+signed for this wallet before; an "All outputs" switch, shown only when the
+two differ, holds every one, for a device that hasn't or says some are
+missing. The screen stays on (`isIdleTimerDisabled`) while Key images by QR
+is open, and may sleep while the app is locked.
+
+Step 2 uses the setup camera in a mode that keeps reading and hands over each
+new part. The app reads the parts itself (`lib/ur.dart`, a port of bc-ur's
+decoder, fountain-coded parts included) to show "N of M parts scanned", then
+hands the whole message to `importKeyImagesUR` as one code, so nothing is
+written to a file. Each part is first checked like a setup code: one that
+might carry a spend key or seed (a run of words, a field named for one, or a
+UR type such as `crypto-seed`) is refused in red, anything but an
+`xmr-keyimage` code, or a whole one that doesn't start "Monero key image
+export", in amber ("Not a key images code"). A refusal pauses the camera;
+Scan again keeps the parts read. The import then goes as for a file, through
+Import problem (screen 6) worded for a code, whose "Scan again" starts the
+reading over; Cancel goes back to Import key images. Last import's From says
+"Signing device, by QR".
+
+Tried with throwaway wallets (a full wallet standing in for the signing
+device) and the simulator. A real signing device and a real camera wait for
+TestFlight.
 
 ### 6. Import problem
 
@@ -588,11 +615,9 @@ its limits.
   permission), the simplest way to meet the wallet library's LGPL-3.0.
   Whether App Store terms and the LGPL fit together at all is still disputed;
   see [app-store.md](../app-store.md#the-wallet-librarys-lgpl).
-- Key images by QR: scanning can reuse the setup camera
-  (`ios/Runner/QrCamera.swift`, AVFoundation, no library), but it still needs
-  a UR decoder and encoder for the animated `xmr-output` and `xmr-keyimage`
-  codes (monero_c's `exportOutputsUR` / `importKeyImagesUR` may cover the
-  payload). An Android version needs its own camera code; mobile_scanner uses
+- Key images by QR: try it with a real signing device (Passport with Cake
+  Signer, Feather's offline signing) and the iPhone's camera once TestFlight
+  is set up. An Android version needs its own camera code; mobile_scanner uses
   Google ML Kit there, which the privacy rules rule out.
 - Confirm by hand that the GUI shows a payment to a subaddress made on the
   phone. The addresses match the GUI's (tested), and New stays inside its

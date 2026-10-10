@@ -2,17 +2,22 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import 'advanced_screen.dart';
+import 'key_images_qr_screen.dart';
 import 'pick_file.dart';
+import 'scan_screen.dart';
 import 'session.dart';
 import 'tor.dart';
 import 'ui.dart';
 import 'wallet.dart';
 
-/// Why a key images file wasn't imported: screen 6 of the design, "Import
+/// Why key images weren't imported: screen 6 of the design, "Import
 /// problem".
 enum ImportProblem {
-  otherWallet('This file is from another wallet'),
-  notKeyImages("This isn't a key images file"),
+  otherWallet(
+    'This file is from another wallet',
+    'These key images are from another wallet',
+  ),
+  notKeyImages("This isn't a key images file", "This isn't a key images code"),
   missingOutputs('Some outputs are missing'),
 
   /// Not an error: the file waits until this device has scanned as far as the
@@ -21,9 +26,12 @@ enum ImportProblem {
   noNode("Your node didn't answer"),
   failed("The key images weren't imported");
 
-  const ImportProblem(this.title);
+  const ImportProblem(this.title, [String? scannedTitle])
+    : scannedTitle = scannedTitle ?? title;
 
+  /// For a file, and for key images scanned by QR.
   final String title;
+  final String scannedTitle;
 
   /// Worked out from the wallet library's error message. A file that lists
   /// outputs this device hasn't found reads as [missingOutputs], which is
@@ -87,14 +95,89 @@ bool readyToImport(WalletSession s, {int height = 0}) =>
 
 /// What the Import problem screen asks the screen below it to do.
 enum _Next {
-  /// Import the same file again: sync caught up, or the node may answer now.
+  /// Import the same key images again: sync caught up, or the node may answer
+  /// now.
   again,
 
-  /// Choose another file.
+  /// Choose another file, or scan again.
   another,
 }
 
-/// Screen 4 of the design: "Import key images", from a file the GUI exported.
+/// Key images to import, as the Import problem screen describes them: a file
+/// by its [name], or with [scanned] the key images code a signing device
+/// showed. [size] is in bytes; a code holds what a file would.
+typedef KeyImagesSource = ({String name, int size, bool scanned});
+
+/// How [importOrExplain] ended.
+enum ImportOutcome {
+  imported,
+
+  /// The person asked for another file, or to scan again.
+  another,
+
+  /// The person gave up, or the screen went.
+  cancelled,
+}
+
+/// Imports with [import], or explains on the Import problem screen why not,
+/// until the key images are imported or the person asks for others or gives
+/// up. Key images that list payments this device hasn't scanned yet wait for
+/// sync, and are then imported by themselves. [importing] hears when the
+/// wallet starts and stops reading them.
+Future<ImportOutcome> importOrExplain(
+  BuildContext context,
+  WalletSession s, {
+  required KeyImagesSource source,
+  required Future<void> Function() import,
+  ValueChanged<bool>? importing,
+}) async {
+  var waitFor = 0;
+  var waited = false;
+  while (context.mounted) {
+    ImportProblem problem;
+    if (!readyToImport(s, height: waitFor)) {
+      problem = ImportProblem.notSynced;
+      waitFor = s.nodeHeight;
+    } else {
+      try {
+        importing?.call(true);
+        await import();
+        return ImportOutcome.imported;
+      } on WalletException catch (e) {
+        problem = ImportProblem.from(e.message);
+      } finally {
+        importing?.call(false);
+      }
+      // Key images can list a payment this device hasn't scanned yet: wait
+      // for the next blocks once, and only then call outputs missing.
+      if (problem == ImportProblem.missingOutputs &&
+          !waited &&
+          (s.blocksToGo > 0 || !readyToImport(s))) {
+        problem = ImportProblem.notSynced;
+        waitFor = s.nodeHeight;
+      }
+    }
+    if (!context.mounted) break;
+    waited = waited || problem == ImportProblem.notSynced;
+    final next = await Navigator.push<_Next>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ImportProblemScreen(
+          problem: problem,
+          session: s,
+          source: source,
+          waitFor: waitFor,
+        ),
+      ),
+    );
+    if (next == null) break;
+    if (next == _Next.another) return ImportOutcome.another;
+  }
+  return ImportOutcome.cancelled;
+}
+
+/// Screen 4 of the design: "Import key images", from a file the GUI exported,
+/// or on iPhone by animated QR codes from a signing device.
 class KeyImagesScreen extends StatefulWidget {
   const KeyImagesScreen(this.session, {super.key});
 
@@ -157,6 +240,13 @@ class _KeyImagesScreenState extends State<KeyImagesScreen> {
     if (file != null) await _import(file);
   }
 
+  void _byQr(QrCamera camera) => Navigator.push(
+    context,
+    MaterialPageRoute<void>(
+      builder: (_) => KeyImagesQrScreen(widget.session, camera: camera),
+    ),
+  );
+
   void _importReceived() {
     final file = _received!;
     setState(() => _received = null);
@@ -167,57 +257,26 @@ class _KeyImagesScreenState extends State<KeyImagesScreen> {
   /// it is imported or given up. Then deletes the app's copy of each file.
   Future<void> _import(KeyImagesFile file) async {
     final s = widget.session;
-    var waitFor = 0;
-    var waited = false;
     setState(() => _file = file);
     try {
-      while (mounted) {
-        ImportProblem problem;
-        if (!readyToImport(s, height: waitFor)) {
-          problem = ImportProblem.notSynced;
-          waitFor = s.nodeHeight;
-        } else {
-          try {
-            setState(() => _importing = true);
-            await s.importKeyImages(file.path);
-            return;
-          } on WalletException catch (e) {
-            problem = ImportProblem.from(e.message);
-          } finally {
-            _importing = false;
-            if (mounted) setState(() {});
-          }
-          // A file can list a payment this device hasn't scanned yet: wait for
-          // the next blocks once, and only then call outputs missing.
-          if (problem == ImportProblem.missingOutputs &&
-              !waited &&
-              (s.blocksToGo > 0 || !readyToImport(s))) {
-            problem = ImportProblem.notSynced;
-            waitFor = s.nodeHeight;
-          }
-        }
+      for (;;) {
         if (!mounted) return;
-        waited = waited || problem == ImportProblem.notSynced;
-        final next = await Navigator.push<_Next>(
+        final current = file;
+        final outcome = await importOrExplain(
           context,
-          MaterialPageRoute(
-            builder: (_) => ImportProblemScreen(
-              problem: problem,
-              session: s,
-              file: file,
-              waitFor: waitFor,
-            ),
-          ),
+          s,
+          source: (name: current.name, size: current.size, scanned: false),
+          import: () => s.importKeyImages(current.path),
+          importing: (on) {
+            _importing = on;
+            if (mounted) setState(() {});
+          },
         );
-        if (next == null || !mounted) return;
-        if (next == _Next.another) {
-          file.discard();
-          final another = await _pick();
-          if (another == null) return;
-          setState(() => _file = file = another);
-          waitFor = 0;
-          waited = false;
-        }
+        if (outcome != ImportOutcome.another || !mounted) return;
+        file.discard();
+        final another = await _pick();
+        if (another == null) return;
+        setState(() => _file = file = another);
       }
     } finally {
       file.discard();
@@ -315,6 +374,34 @@ class _KeyImagesScreenState extends State<KeyImagesScreen> {
                 ],
               ),
             ),
+            if (qrCamera case final camera?)
+              AppCard(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'From a signing device, by QR',
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'For Passport with Cake Signer, Feather offline signing '
+                      "and other wallets that use Monero's animated QR codes: "
+                      'show them the outputs, then scan their key images.',
+                      style: context.body,
+                    ),
+                    const SizedBox(height: 12),
+                    FilledButton(
+                      onPressed: busy ? null : () => _byQr(camera),
+                      style: context.secondaryButton,
+                      child: const Text('Use QR codes'),
+                    ),
+                  ],
+                ),
+              ),
             Note(
               'Importing asks your node (${s.node}) which of these key '
               "images are spent. A node you don't run then knows those "
@@ -367,22 +454,22 @@ class _KeyImagesScreenState extends State<KeyImagesScreen> {
   );
 }
 
-/// Screen 6 of the design: why [file] wasn't imported, two facts about it, and
-/// the fix. For [ImportProblem.notSynced] it shows the sync and goes back to
-/// import the file by itself once [readyToImport]. Going back without a fix
-/// gives the file up.
+/// Screen 6 of the design: why the key images from [source] weren't imported,
+/// two facts about them, and the fix. For [ImportProblem.notSynced] it shows
+/// the sync and goes back to import them by itself once [readyToImport].
+/// Going back without a fix gives them up.
 class ImportProblemScreen extends StatefulWidget {
   const ImportProblemScreen({
     super.key,
     required this.problem,
     required this.session,
-    required this.file,
+    required this.source,
     this.waitFor = 0,
   });
 
   final ImportProblem problem;
   final WalletSession session;
-  final KeyImagesFile file;
+  final KeyImagesSource source;
 
   /// For [ImportProblem.notSynced]: the height to scan to first.
   final int waitFor;
@@ -392,7 +479,6 @@ class ImportProblemScreen extends StatefulWidget {
 }
 
 class _ImportProblemScreenState extends State<ImportProblemScreen> {
-  late final int _size = widget.file.size;
   late final int _startHeight = widget.session.height;
   bool _leaving = false;
 
@@ -419,36 +505,56 @@ class _ImportProblemScreenState extends State<ImportProblemScreen> {
       final c = context.colors;
       final problem = widget.problem;
       if (problem == ImportProblem.notSynced) _importWhenReady();
-      final file = '${widget.file.name} (${formatSize(_size)})';
-      final inFile = keyImagesInFile(_size);
+      final (:name, :size, :scanned) = widget.source;
+      final inFile = keyImagesInFile(size);
       final found = _s.outputs.total;
+      // What the key images came in, as the facts name it.
+      final (String, Widget) source = scanned
+          ? (
+              'Code',
+              _Fact(
+                inFile != null ? plural(inFile, 'key image') : formatSize(size),
+              ),
+            )
+          : ('File', _Fact('$name (${formatSize(size)})'));
+      final (String, Widget) from = scanned
+          ? ('From', _Fact(name))
+          : ('File', _Fact(name));
+      final they = scanned ? 'These key images' : 'The file';
+      final rescan = scanned
+          ? 'Rescan from the restore height of the wallet on the signing '
+                'device, then show it the outputs again.'
+          : "Rescan from the GUI's restore height, then import again.";
       final (String body, List<(String, Widget)> facts) = switch (problem) {
         ImportProblem.otherWallet => (
-          "It can't be opened with this wallet's view key. Export the key "
-              'images again from the GUI wallet that matches this address, '
-              'and choose the new file.',
+          scanned
+              ? "They can't be opened with this wallet's view key. On the "
+                    'signing device, open the wallet that matches this '
+                    'address, and scan its key images.'
+              : "It can't be opened with this wallet's view key. Export the "
+                    'key images again from the GUI wallet that matches this '
+                    'address, and choose the new file.',
           [
             (
               'Wallet on this $thisDevice',
               _Fact(shortAddress(_s.wallet.address)),
             ),
-            ('File', _Fact(file)),
+            source,
           ],
         ),
         ImportProblem.notKeyImages => (
-          'Choose the file the Monero GUI saved from Send → Advanced '
-              'options → Key images → Export.',
-          [
-            ('File', _Fact(widget.file.name)),
-            ('Size', _Fact(formatSize(_size))),
-          ],
+          scanned
+              ? 'Scan the key images code the signing device shows once it '
+                    "has read this app's outputs."
+              : 'Choose the file the Monero GUI saved from Send → Advanced '
+                    'options → Key images → Export.',
+          [from, ('Size', _Fact(formatSize(size)))],
         ),
         ImportProblem.missingOutputs => (
-          'The file mentions '
+          '$they ${scanned ? 'mention' : 'mentions'} '
               '${inFile != null && inFile > found ? plural(inFile - found, 'output') : 'outputs'} '
               'this $thisDevice never found, because it started scanning '
-              "after they arrived. Rescan from the GUI's restore height, then "
-              'import again.',
+              'after they arrived. $rescan',
           [
             ('Restore height here', _Fact('${_s.wallet.restoreHeight}')),
             if (inFile != null && inFile > found)
@@ -458,9 +564,9 @@ class _ImportProblemScreenState extends State<ImportProblemScreen> {
           ],
         ),
         ImportProblem.notSynced => (
-          'The file includes outputs newer than this $thisDevice has '
-              'scanned. The import runs by itself once sync catches up. Keep '
-              'the app open.',
+          '$they ${scanned ? 'include' : 'includes'} outputs newer than '
+              'this $thisDevice has scanned. The import runs by itself once '
+              'sync catches up. Keep the app open.',
           [
             ('Scanned to', _Fact('${_s.height}')),
             (
@@ -473,21 +579,24 @@ class _ImportProblemScreenState extends State<ImportProblemScreen> {
           'Importing asks your node which of these key images are spent, '
               "and it didn't answer. Try again, or change the node in "
               'Settings.',
-          [('Node', _Fact(_s.node)), ('File', _Fact(file))],
+          [('Node', _Fact(_s.node)), source],
         ),
         ImportProblem.failed => (
-          'The wallet library refused the file. Export it again from the '
-              'Monero GUI and try once more.',
-          [
-            ('File', _Fact(widget.file.name)),
-            ('Size', _Fact(formatSize(_size))),
-          ],
+          scanned
+              ? 'The wallet library refused them. Show the outputs to the '
+                    'signing device again, and scan the key images it shows.'
+              : 'The wallet library refused the file. Export it again from '
+                    'the Monero GUI and try once more.',
+          [from, ('Size', _Fact(formatSize(size)))],
         ),
       };
       final (String? fix, _Next? next) = switch (problem) {
         ImportProblem.otherWallet ||
         ImportProblem.notKeyImages ||
-        ImportProblem.failed => ('Choose another file', _Next.another),
+        ImportProblem.failed => (
+          scanned ? 'Scan again' : 'Choose another file',
+          _Next.another,
+        ),
         ImportProblem.noNode => ('Try again', _Next.again),
         ImportProblem.missingOutputs => ('Rescan from an earlier height', null),
         ImportProblem.notSynced => (null, null),
@@ -543,7 +652,7 @@ class _ImportProblemScreenState extends State<ImportProblemScreen> {
           ),
           const SizedBox(height: 18),
           Text(
-            problem.title,
+            scanned ? problem.scannedTitle : problem.title,
             style: const TextStyle(fontSize: 26, fontWeight: FontWeight.w600),
           ),
           const SizedBox(height: 8),

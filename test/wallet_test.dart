@@ -23,18 +23,22 @@ import 'package:monero/src/monero.dart';
 import 'package:monero/src/wallet2.dart';
 import 'package:monero_view_wallet/advanced_screen.dart';
 import 'package:monero_view_wallet/home_screen.dart';
+import 'package:monero_view_wallet/key_images_qr_screen.dart';
 import 'package:monero_view_wallet/key_images_screen.dart';
 import 'package:monero_view_wallet/lock.dart';
 import 'package:monero_view_wallet/main.dart';
 import 'package:monero_view_wallet/node_screen.dart';
 import 'package:monero_view_wallet/pick_file.dart';
 import 'package:monero_view_wallet/price.dart';
+import 'package:monero_view_wallet/qr_tile.dart';
+import 'package:monero_view_wallet/scan_screen.dart';
 import 'package:monero_view_wallet/secret_store.dart';
 import 'package:monero_view_wallet/session.dart';
 import 'package:monero_view_wallet/settings_screen.dart';
 import 'package:monero_view_wallet/setup_screen.dart';
 import 'package:monero_view_wallet/tor.dart';
 import 'package:monero_view_wallet/ui.dart';
+import 'package:monero_view_wallet/ur.dart';
 import 'package:monero_view_wallet/wallet.dart';
 
 import 'fake_check.dart';
@@ -429,6 +433,67 @@ void main() {
       expect(keyImagesInFile(164 + 3 * 96 + 1), isNull);
     },
   );
+
+  test('shows its outputs as an animated code, and imports the key images code '
+      'a signing device shows back', () async {
+    // full stands in for the signing device: it has the spend key.
+    final other = manager.createWallet(
+      path: '',
+      password: '',
+      networkType: Network.stagenet.id,
+    );
+    addTearDown(() => manager.closeWallet(other, false));
+    final wallet = watch(full);
+    addTearDown(wallet.close);
+
+    final outputs = await wallet.outputsQr();
+    // The throwaway wallet has no outputs; the code still says so.
+    expect(outputs.count, 0);
+    expect(outputs.freshCount, 0);
+    expect(outputs.all, isNotEmpty);
+    for (final part in [...outputs.fresh, ...outputs.all]) {
+      expect(part, startsWith('ur:xmr-output/'));
+    }
+    final shown = UrReader('xmr-output');
+    for (final part in outputs.all) {
+      shown.add(part);
+    }
+    expect(shown.complete, isTrue);
+    expect(latin1.decode(shown.bytes!.sublist(0, 20)), 'Monero output export');
+
+    // The signing device reads the parts as shown, and shows its key
+    // images; this app reads them part by part.
+    expect(
+      full.importOutputsUR(outputs.all.join('\n')),
+      isTrue,
+      reason: full.errorString(),
+    );
+    UrReader scan(Wallet2Wallet signer) {
+      final reader = UrReader('xmr-keyimage');
+      for (final part in signer.exportKeyImagesUR(all: true).split('\n')) {
+        reader.add(part);
+      }
+      expect(reader.complete, isTrue, reason: signer.errorString());
+      return reader;
+    }
+
+    final own = scan(full);
+    expect(latin1.decode(own.bytes!.sublist(0, 23)), 'Monero key image export');
+    expect(keyImagesInFile(own.bytes!.length), 0);
+    await wallet.importKeyImagesQr(own.asOneCode);
+
+    Future<ImportProblem?> problemWith(String code) async {
+      try {
+        await wallet.importKeyImagesQr(code);
+      } on WalletException catch (e) {
+        return ImportProblem.from(e.message);
+      }
+      return null;
+    }
+
+    expect(await problemWith(scan(other).asOneCode), ImportProblem.otherWallet);
+    expect(await problemWith(shown.asOneCode), ImportProblem.notKeyImages);
+  });
 
   test('says file sizes and addresses the short way', () {
     expect(formatSize(1), '1 byte');
@@ -1688,6 +1753,256 @@ void main() {
     );
   });
 
+  group('Key images by QR', () {
+    late _FakeQrCamera camera;
+    setUp(() => qrCamera = camera = _FakeQrCamera());
+    tearDown(() => qrCamera = null);
+
+    final shownCode = find.byType(QrTile);
+    final cameraView = find.byKey(const Key('camera'));
+    String shown(WidgetTester tester) =>
+        tester.widget<QrTile>(find.byType(QrTile)).data;
+
+    /// [signer]'s key images, as the animated code it shows: in parts small
+    /// enough that there are several.
+    List<String> keyImagesCode(Wallet2Wallet signer) => [
+      for (final part
+          in signer
+              .exportKeyImagesUR(max_fragment_length: 20, all: true)
+              .split('\n'))
+        if (part.isNotEmpty) part,
+    ];
+
+    Future<void> openQr(WidgetTester tester, WalletSession session) async {
+      await phone(tester);
+      await tester.pumpWidget(
+        MaterialApp(theme: darkTheme, home: KeyImagesScreen(session)),
+      );
+      expect(find.text('From a signing device, by QR'), findsOne);
+      await tester.tap(find.text('Use QR codes'));
+      await settleWallet(tester, () => shows(shownCode));
+    }
+
+    testWidgets('shows the outputs, then reads the key images and imports '
+        'them', (tester) async {
+      // full stands in for the signing device.
+      final session = _OnNode(watch(full), 'node.example:38081')
+        ..synced = true
+        ..scanned = true;
+      addTearDown(session.dispose);
+      await openQr(tester, session);
+      expect(camera.screenOn, [true]);
+      expect(find.text('No outputs found yet.'), findsOne);
+      expect(find.text('All outputs'), findsNothing);
+      // The signing device reads each part as the code steps through them.
+      final seen = <String>{};
+      for (var i = 0; i < 6; i++) {
+        seen.add(shown(tester));
+        await tester.pump(partEvery);
+      }
+      expect(seen.length, greaterThan(1));
+      expect(
+        find.textContaining(' of ${seen.length} · screen stays on'),
+        findsOne,
+      );
+      expect(
+        full.importOutputsUR(seen.join('\n')),
+        isTrue,
+        reason: full.errorString(),
+      );
+
+      await tester.tap(find.text('Next: scan key images'));
+      await tester.pumpAndSettle();
+      expect(camera.animated, isTrue);
+      expect(find.text('Hold the code inside the frame.'), findsOne);
+      final parts = keyImagesCode(full);
+      expect(parts.length, greaterThan(2));
+      camera.show(parts.first);
+      // A part read again changes nothing.
+      camera.show(parts.first);
+      await tester.pump();
+      expect(find.text('1 of ${parts.length} parts scanned'), findsOne);
+      for (final part in parts.skip(1)) {
+        camera.show(part);
+      }
+      await settleWallet(tester, () => shows(find.text('LAST IMPORT')));
+      expect(find.text('Key images by QR'), findsNothing);
+      expect(session.lastImport!.fileName, byQr);
+      expect(find.text(byQr), findsOne);
+      expect(camera.screenOn, [true, false]);
+    });
+
+    testWidgets('refuses spend keys and other codes, and explains key images '
+        'from another wallet', (tester) async {
+      final other = manager.createWallet(
+        path: '',
+        password: '',
+        networkType: Network.stagenet.id,
+      );
+      addTearDown(() => manager.closeWallet(other, false));
+      final session = _OnNode(watch(full), 'node.example:38081')
+        ..synced = true
+        ..scanned = true;
+      addTearDown(session.dispose);
+      await openQr(tester, session);
+      final outputsCode = shown(tester);
+      await tester.tap(find.text('Next: scan key images'));
+      await tester.pumpAndSettle();
+
+      Future<void> refused(String code, String title) async {
+        camera.show(code);
+        await tester.pump();
+        expect(find.text(title), findsOne, reason: code);
+        expect(cameraView, findsNothing, reason: 'the camera is paused');
+        await tester.tap(find.text('Scan again'));
+        await tester.pump();
+        expect(find.text(title), findsNothing);
+        expect(cameraView, findsOne);
+      }
+
+      const spend = 'That code may hold a spend key or seed';
+      await refused(List.filled(25, 'word').join(' '), spend);
+      await refused('ur:crypto-seed/${'ae' * 20}', spend);
+      const notKeyImages = 'Not a key images code';
+      await refused('https://example.com/', notKeyImages);
+      await refused(outputsCode, notKeyImages);
+      // A whole code of the right type, holding something else: the CBOR
+      // byte string "made up".
+      await refused(
+        'ur:xmr-keyimage/${toBytewords([0x47, ...utf8.encode('made up')])}',
+        notKeyImages,
+      );
+      expect(session.lastImport, isNull);
+
+      // Key images from another wallet: the parts read so far are kept
+      // across a refusal.
+      final foreign = keyImagesCode(other);
+      camera.show(foreign.first);
+      await refused('hello', notKeyImages);
+      for (final part in foreign.skip(1)) {
+        camera.show(part);
+      }
+      final otherWallet = find.text('These key images are from another wallet');
+      await settleWallet(tester, () => shows(otherWallet));
+      expect(find.text('Wallet on this device'), findsOne);
+      expect(find.text('0 key images'), findsOne);
+      await tester.tap(find.text('Scan again'));
+      await tester.pumpAndSettle();
+      expect(otherWallet, findsNothing);
+      expect(find.text('Hold the code inside the frame.'), findsOne);
+      expect(cameraView, findsOne);
+
+      // Cancel gives up, back to Import key images.
+      for (final part in foreign) {
+        camera.show(part);
+      }
+      await settleWallet(tester, () => shows(otherWallet));
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+      expect(find.text('Key images by QR'), findsNothing);
+      expect(find.text('Use QR codes'), findsOne);
+      expect(session.lastImport, isNull);
+      expect(camera.screenOn, [true, false]);
+    });
+
+    testWidgets('waits for sync, animates the code, shows all outputs when '
+        'asked, and lets the screen sleep while locked', (tester) async {
+      var clock = DateTime(2026, 10, 10, 12);
+      appLock = AppLock()
+        ..check = FakeCheck(Unlock.faceId)
+        ..now = () => clock;
+      addTearDown(() => appLock = AppLock());
+      // Face ID to open is on, and the app unlocked.
+      await appLock.start(on: false);
+      appLock.on = true;
+      qrCamera = camera = _FakeQrCamera(allow: false);
+      // Made-up parts: the screen shows whatever the wallet gives it.
+      final session =
+          _MadeUpOutputs(watch(full), 'node.example:38081', (
+              fresh: ['fresh 1', 'fresh 2'],
+              freshCount: 3,
+              all: ['all 1', 'all 2', 'all 3'],
+              count: 5,
+            ))
+            ..scanned = true
+            ..height = 100
+            ..nodeHeight = 150;
+      addTearDown(session.dispose);
+      await phone(tester);
+      await tester.pumpWidget(
+        MaterialApp(theme: darkTheme, home: KeyImagesScreen(session)),
+      );
+      await tester.tap(find.text('Use QR codes'));
+      await tester.pumpAndSettle();
+      expect(
+        find.text(
+          'Finishing sync first · 50 blocks to go. The code needs every '
+          'output.',
+        ),
+        findsOne,
+      );
+      expect(enabled(tester, 'Next: scan key images'), isFalse);
+      expect(session.made, 0);
+
+      session
+        ..synced = true
+        ..height = 150;
+      session.dismissKeyImagesNotice(); // any change redraws the screens
+      await tester.pump();
+      await tester.pump();
+      expect(session.made, 1);
+      expect(shown(tester), 'fresh 1');
+      expect(
+        find.text('Animated code · part 1 of 2 · screen stays on'),
+        findsOne,
+      );
+      expect(
+        find.text('3 outputs, from the first without a key image'),
+        findsOne,
+      );
+      await tester.pump(partEvery);
+      expect(shown(tester), 'fresh 2');
+      expect(
+        find.text('Animated code · part 2 of 2 · screen stays on'),
+        findsOne,
+      );
+      await tester.pump(partEvery);
+      expect(shown(tester), 'fresh 1');
+
+      await tester.tap(find.text('All outputs'));
+      await tester.pump();
+      expect(shown(tester), 'all 1');
+      expect(find.text('All 5 outputs'), findsOne);
+      await tester.pump(partEvery);
+      expect(
+        find.text('Animated code · part 2 of 3 · screen stays on'),
+        findsOne,
+      );
+
+      // The code stops while the camera step shows, here with the camera off.
+      await tester.tap(find.text('Next: scan key images'));
+      await tester.pumpAndSettle();
+      expect(find.text('The camera is off for this app.'), findsOne);
+      expect(cameraView, findsNothing);
+      await tester.tap(find.text('Show outputs again'));
+      await tester.pump();
+      expect(shown(tester), 'all 1');
+      await tester.pump(partEvery);
+      expect(shown(tester), 'all 2');
+      expect(session.made, 1);
+
+      // Locked after a while in the background: the screen may sleep.
+      expect(camera.screenOn, [true]);
+      appLock.lifecycleChanged(AppLifecycleState.paused);
+      clock = clock.add(lockAfter);
+      appLock.lifecycleChanged(AppLifecycleState.inactive);
+      expect(appLock.locked, isTrue);
+      expect(camera.screenOn, [true, false]);
+      await tester.pumpWidget(const SizedBox());
+      expect(camera.screenOn, [true, false]);
+    });
+  });
+
   testWidgets(
     'Settings → Advanced rescans from an earlier height, after asking',
     (tester) async {
@@ -2778,4 +3093,50 @@ class _FakeTor extends BuiltInTor {
     stops++;
     progress = 0;
   }
+}
+
+/// A session whose outputs code is [qr], made up.
+class _MadeUpOutputs extends _OnNode {
+  _MadeUpOutputs(super.wallet, super.node, this.qr);
+
+  final OutputsQr qr;
+  var made = 0;
+
+  @override
+  Future<OutputsQr> outputsQr() async {
+    made++;
+    return qr;
+  }
+}
+
+/// Stands in for the iPhone's camera: [show] is a code held up to it.
+class _FakeQrCamera implements QrCamera {
+  _FakeQrCamera({this.allow = true});
+
+  final bool allow;
+  ValueChanged<String>? _onCode;
+
+  /// Whether the last view was for an animated code.
+  bool? animated;
+
+  /// Each time the screen was asked to stay on, or allowed to sleep.
+  final screenOn = <bool>[];
+
+  @override
+  Future<bool> allowed() async => allow;
+
+  @override
+  Future<void> openSettings() async {}
+
+  @override
+  Widget view(ValueChanged<String> onCode, {bool animated = false}) {
+    _onCode = onCode;
+    this.animated = animated;
+    return const SizedBox.expand(key: Key('camera'));
+  }
+
+  @override
+  Future<void> keepScreenOn(bool on) async => screenOn.add(on);
+
+  void show(String code) => _onCode!(code);
 }
