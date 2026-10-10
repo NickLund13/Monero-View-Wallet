@@ -11,13 +11,12 @@
 # lock must offer, sends the app to the background and checks that the app
 # switcher's snapshot of it is blank (tool/snapshot_colors.swift).
 #
-# Mac minutes are scarce: the repository is private, so every Mac minute uses
-# 10 of the free Actions minutes that all the other checks share. So this is
-# not a pull request check. It runs by hand (Actions > iOS build > Run
-# workflow, on any branch). It used to run by itself too, after a push to main
-# that changes the iOS project or the wallet library and on pull requests that
-# change this workflow; those runs are paused while the free minutes are short
-# (see the if: on the job below).
+# It runs by itself on pull requests and after a push to main that change the
+# iOS project, the dependencies, the fetch scripts, the smoke test, the
+# flutter-setup action or this workflow (the paths under on:). Draft pull
+# requests are skipped, like the other checks: it runs when a pull request is
+# marked ready, and again on each push after that. It can also be started by
+# hand (Actions > iOS build > Run workflow, on any branch).
 #
 # Signing and TestFlight come later, once the Apple developer account exists:
 # see the note at the end.
@@ -40,25 +39,31 @@ on:
       - .github/actions/flutter-setup/**
       - .github/workflows/ios-build.yml
   pull_request:
-    paths:
+    types: [opened, ready_for_review, reopened, synchronize]
+    paths: # the same as for push
+      - ios/**
+      - pubspec.yaml
+      - pubspec.lock
+      - tool/fetch_monero_c.sh
+      - tool/fetch_tor.sh
+      - tool/check_privacy_manifests.sh
+      - tool/ios_smoke.dart
+      - tool/snapshot_colors.swift
+      - .github/actions/flutter-setup/**
       - .github/workflows/ios-build.yml
 
 permissions:
   contents: read
 
 concurrency:
-  # Per event too, so an automatic run, which skips its job, never cancels a
-  # run started by hand.
+  # Per event too, so an automatic run never cancels a run started by hand.
   group: ios-build-${{ github.ref }}-${{ github.event_name }}
   cancel-in-progress: true
 
 jobs:
   build:
     name: iPhone build and simulator smoke test
-    # Paused 2026-10-10: these Mac runs used most of the free Actions minutes,
-    # so only a run started by hand builds. Delete this line to bring back the
-    # runs after a push to main and on pull requests that change this file.
-    if: github.event_name == 'workflow_dispatch'
+    if: ${{ github.event_name != 'pull_request' || !github.event.pull_request.draft }}
     runs-on: macos-26 # Apple silicon, so the simulator runs the arm64 library
     timeout-minutes: 30
     steps:

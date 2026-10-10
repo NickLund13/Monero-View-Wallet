@@ -63,18 +63,17 @@ for every change; read them before writing code:
   checks are the gate again.
 - App tests runs `flutter analyze` and every test that needs no network, on
   Linux. Run the same before pushing app code (README.md says how). The
-  stagenet node tests run in the Stagenet tests workflow instead, by hand only
-  while its nightly run is paused to save Actions minutes. When a change
-  touches syncing, the node, key image import, the app's Tor, the USD price
-  lookup or that workflow (other than when it runs), run it on the PR's
-  branch by hand before merging and say in the PR whether it passed.
+  stagenet node tests run in the Stagenet tests workflow instead, every night
+  and by hand. When a change touches syncing, the node, key image import, the
+  app's Tor, the USD price lookup or that workflow (other than when it runs),
+  run it on the PR's branch by hand before merging and say in the PR whether
+  it passed.
   The Windows build and the spend test still run only on the PC.
 - The iOS build workflow builds the app for iPhone (unsigned) and runs a smoke
-  test on the iOS simulator. Mac minutes are scarce, so it is not a PR check.
-  Its runs after a push to main are paused too, so it runs only by hand.
-  When a change touches a path its paused push trigger lists (`ios/`, the
-  dependencies, the fetch scripts, the smoke test, the flutter-setup action,
-  or the workflow other than when it runs), run it on the PR's branch by hand
+  test on the iOS simulator. It runs by itself after a push to main, and on a
+  PR once it is ready for review, when the change touches a path its triggers
+  list (`ios/`, the dependencies, the fetch scripts, the smoke test, the
+  flutter-setup action, or the workflow). On such a PR, wait for that run
   before merging and say in the PR whether it passed.
 - New dependency or GitHub Action: pin the exact version (Actions by commit
   SHA), verify downloads by checksum, and justify it in the PR.
