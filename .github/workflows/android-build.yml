@@ -9,7 +9,9 @@
 # tool/android_smoke.dart calls the wallet library with obviously fake input,
 # saves a throwaway wallet with its password in the Keystore, opens it again
 # after reading the Keystore afresh and removes it, and opens the app's first
-# screen (tool/android_smoke.sh).
+# screen. tool/android_smoke.sh then has Android make the app's activity anew,
+# as it does after a theme change, and checks that the app keeps running
+# without starting its Dart code again.
 #
 # Gradle checks every file it downloads (the Android and Kotlin build tools,
 # the libraries Flutter's Android code uses) against the checksums in

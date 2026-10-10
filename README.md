@@ -341,8 +341,9 @@ throwaway debug key, and checks the result:
 - A smoke test on the emulator, on Android 11 and Android 15, both without
   Google's apps or services: the wallet library loads and runs, a throwaway
   wallet is saved with its password under the Keystore, opens again after the
-  Keystore is read afresh, as at the next launch, and is removed, and the app
-  shows its first screen.
+  Keystore is read afresh, as at the next launch, and is removed. The app
+  shows its first screen, and keeps running without starting afresh when
+  Android makes its activity anew, as it does after a theme change.
 
 It runs by itself on pull requests that are ready for review and after a push
 to main, when they change the Android project, the app's code, the wallet

@@ -3,8 +3,9 @@
 /// about.
 ///
 /// Flutter lists its engine and every Dart package by itself. The native
-/// libraries (the wallet library and Tor) and the fonts come from elsewhere,
-/// so their licenses are kept in assets/licenses/ and added here.
+/// libraries (the wallet library and Tor), the Java and Kotlin libraries of
+/// the Android build and the fonts come from elsewhere, so their licenses are
+/// kept in assets/licenses/ and added here.
 library;
 
 import 'dart:io';
@@ -93,6 +94,20 @@ const bundledLicenses = <(List<String>, String, Set<Build>)>[
   (['liblzma'], 'liblzma.txt', {Build.iPhone}),
   (['Tor.framework'], 'tor-framework.txt', {Build.iPhone}),
   (['zlib'], 'zlib.txt', {Build.windows}),
+  // The Java and Kotlin libraries that Flutter's Android code brings along.
+  (
+    [
+      'AndroidX',
+      'Kotlin',
+      'kotlinx.coroutines',
+      'JetBrains Java Annotations',
+      'Guava ListenableFuture',
+      'ReLinker',
+      'JSpecify',
+    ],
+    'android-libraries.txt',
+    {Build.android},
+  ),
   // The fonts.
   (['IBM Plex Sans', 'IBM Plex Mono'], 'ibm-plex.txt', allBuilds),
 ];

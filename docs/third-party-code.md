@@ -85,6 +85,33 @@ Windows `tor.exe` has no liblzma or zstd in it, and `tor.txt`, `openssl.txt`,
 `libevent.txt` and `zlib.txt` are byte for byte the notices the Tor Project
 ships in its bundle's `docs/` folder.
 
+## The Android libraries
+
+In the Android build only: the Java and Kotlin libraries that Flutter's
+Android code (its embedding, `io.flutter:flutter_embedding_release`) depends
+on, which Gradle packs into the app. Found on 2026-10-10 in the release
+build's runtime classpath (`./gradlew :app:dependencies --configuration
+releaseRuntimeClasspath`, as the Android build workflow prints it when it
+writes the Gradle checksums). All are under the Apache-2.0, so they share one
+file, `android-libraries.txt`, written for this app: each part's copyright
+line, the `NOTICE` files that Kotlin and kotlinx.coroutines ship (the only
+ones of these that have one), then the license, which is
+[Kotlin's LICENSE.txt](https://raw.githubusercontent.com/JetBrains/kotlin/v2.4.0/license/LICENSE.txt),
+byte for byte the Apache Software Foundation's text.
+
+| Part | Version |
+| --- | --- |
+| AndroidX: activity 1.8.1, annotation 1.8.1, annotation-experimental 1.4.0, arch core 2.2.0, collection 1.1.0, concurrent-futures 1.1.0, core 1.13.1, customview 1.0.0, exifinterface 1.4.1, fragment 1.7.1, interpolator 1.0.0, lifecycle 2.7.0, loader 1.0.0, profileinstaller 1.3.1, savedstate 1.2.1, startup 1.1.1, tracing 1.2.0, versionedparcelable 1.1.1, viewpager 1.0.0, window 1.2.0, window extensions core 1.0.0 | as listed |
+| Kotlin standard library | 2.4.0 (jdk7 and jdk8 parts 1.8.20) |
+| kotlinx.coroutines | 1.7.1 |
+| JetBrains Java Annotations | 23.0.0 |
+| Guava ListenableFuture | 1.0 |
+| ReLinker | 1.4.5 |
+| JSpecify | 1.0.0 |
+
+They change with Flutter and the Kotlin version in `android/settings.gradle.kts`:
+check this list again when either changes.
+
 ## The fonts
 
 | File | Part | Version | License | Text from |
@@ -95,6 +122,8 @@ ships in its bundle's `docs/` folder.
 
 - **Keep the notices:** every part above. The app does, in Settings.
 - **OpenSSL (Apache-2.0):** also say if it was changed. It wasn't.
+- **The Android libraries (Apache-2.0):** also ship the `NOTICE` files that
+  come with them. The app does, in `android-libraries.txt`. None was changed.
 - **monero_c, polyseed and the Trezor definitions (LGPL-3.0):** the app has to
   say they are used and under which license, ship the LGPL-3.0 and GPL-3.0
   texts, and say where their source is (`lgpl-source.txt`); the app does all
