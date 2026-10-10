@@ -105,17 +105,20 @@ Future<String> _faceId() async {
 }
 
 /// The Tor inside the app (ios/Runner/InAppTor.swift) starts with the app's
-/// own command line, which keeps it off the network, takes the cookie it
-/// wrote and says it is the tor that tool/fetch_tor.sh pins.
+/// own command line, which keeps it off the network, writes down the control
+/// port it picked, takes the cookie it wrote and says it is the tor that
+/// tool/fetch_tor.sh pins.
 Future<String> _tor() async {
   try {
     final folder = torFolder;
     if (!torInApp || folder == null) return 'not in use';
+    final port = File('$folder/$torControlPortFile');
+    if (port.existsSync()) port.deleteSync();
     final state = await runTorInApp(inAppTorArguments(folder))
         .timeout(const Duration(seconds: 20));
     if (state != 'started') return 'unexpected: $state';
     final control = await TorControl.open(
-      torControlAddress,
+      port,
       File('$folder/control_auth_cookie'),
     );
     final version = await control.command('GETINFO version');

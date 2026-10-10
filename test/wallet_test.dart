@@ -727,7 +727,15 @@ void main() {
       torProxy = null;
     });
 
+    /// Makes the app's Tor count as connected for this test.
+    void torIsReady() {
+      final real = builtInTor;
+      builtInTor = BuiltInTor()..progress = 100;
+      addTearDown(() => builtInTor = real);
+    }
+
     test('the wallet library hands an onion node to Tor by name', () async {
+      torIsReady();
       final onion = '${'a' * 56}.onion'; // made up
       expect((await ViewWallet.probeNode('$onion:38081', tor: tor)).height, 0);
       // SOCKS4a: version 4, connect, the port, then 0.0.0.1, which says a name
@@ -751,6 +759,7 @@ void main() {
     });
 
     test('a wallet told to use Tor never asks its node directly', () async {
+      torIsReady();
       // Stands in for the node, and counts who connects to it.
       final node = await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
       addTearDown(node.close);
@@ -777,6 +786,68 @@ void main() {
       expect(wallet.tor, isNull);
       expect(torProxy, isNull);
     });
+
+    test(
+      "a wallet saved with Tor asks nothing until the app's Tor is ready",
+      () async {
+        final dir = Directory.systemTemp.createTempSync('mvw_test');
+        walletFile = '${dir.path}${Platform.pathSeparator}wallet';
+        final realAddress = torAddress;
+        final realTor = builtInTor;
+        addTearDown(() {
+          ViewWallet.forgetSaved();
+          walletFile = null;
+          torAddress = realAddress;
+          builtInTor = realTor;
+          dir.deleteSync(recursive: true);
+        });
+        // Something else listens where the app's Tor will, as at launch
+        // before Tor has started.
+        torAddress = tor;
+        final appTor = builtInTor = BuiltInTor();
+        var wallet = ViewWallet.create(
+          address: full.address(),
+          viewKey: full.secretViewKey(),
+          restoreHeight: 0,
+          save: true,
+        );
+        await wallet.save({'mvw.node': '127.0.0.1:9', 'mvw.tor': tor});
+        await wallet.close();
+        final keyImages = '${dir.path}/key_images';
+        expect(full.exportKeyImages(keyImages, all: true), isTrue);
+
+        wallet = ViewWallet.openSaved()!;
+        addTearDown(wallet.close);
+        expect(wallet.tor, tor);
+        expect(await wallet.nodeHeight(), 0);
+        expect((await ViewWallet.probeNode('127.0.0.1:9', tor: tor)).height, 0);
+        await expectLater(
+          wallet.importKeyImages(keyImages),
+          throwsA(
+            isA<WalletException>().having(
+              (e) => ImportProblem.from(e.message),
+              'problem',
+              ImportProblem.noNode,
+            ),
+          ),
+        );
+        await expectLater(
+          wallet.connect('127.0.0.1:9', tor: tor),
+          throwsA(isA<WalletException>()),
+        );
+        // A sync thread let loose would have asked at once.
+        await Future<void>.delayed(const Duration(seconds: 2));
+        expect(asked, isEmpty);
+
+        // Once Tor is ready, the wallet syncs through it.
+        appTor.progress = 100;
+        wallet.followTor();
+        for (var i = 0; i < 50 && asked.isEmpty; i++) {
+          await Future<void>.delayed(const Duration(milliseconds: 100));
+        }
+        expect(asked, isNotEmpty);
+      },
+    );
 
     test(
       "reaches the stagenet node and Kraken through the app's own Tor",
@@ -1042,6 +1113,41 @@ void main() {
       await tester.pumpAndSettle();
       expect(asked, [(onion, torAddress)]);
       expect(find.text("Can't reach this node over Tor."), findsOne);
+    });
+
+    testWidgets('with Tor on, onion nodes come first and the others say a '
+        'relay can read them', (tester) async {
+      torProgram = 'tor'; // this build has one
+      addTearDown(() => torProgram = null);
+      final listed = publicNodes[Network.mainnet]!;
+      final onion = listed.firstWhere((n) => isOnion(n.host)).host;
+      final regular = listed.first.host;
+      double top(String text) => tester.getTopLeft(find.text(text)).dy;
+      final caution = find.textContaining('a Tor relay can read it');
+      await phone(tester);
+      Future<void> show({required bool tor}) => tester.pumpWidget(
+        MainApp(
+          home: NodeScreen(
+            key: UniqueKey(),
+            network: Network.mainnet,
+            action: 'Save',
+            tor: tor,
+            onChosen: (_, _, _) async {},
+          ),
+        ),
+      );
+
+      await show(tor: false);
+      expect(top(regular), lessThan(top(onion)));
+      expect(caution, findsNothing);
+
+      await show(tor: true);
+      expect(top(onion), lessThan(top(regular)));
+      expect(
+        caution,
+        findsNWidgets(listed.where((n) => !isOnion(n.host)).length),
+      );
+      expect(find.textContaining('an onion node is best'), findsOne);
     });
 
     testWidgets('Test goes over Tor while the switch shows Tor on', (
@@ -1826,6 +1932,43 @@ void main() {
       expect(otherWallet, findsNothing);
       expect(session.lastImport!.fileName, 'own');
       expect(File(foreign.path).existsSync(), isFalse);
+    });
+
+    testWidgets('drops a file chosen once the app has locked', (tester) async {
+      // As the iPhone keeps them: copies, each alone in a folder.
+      File copy(String name) => File('${dir.path}/$name/$name')
+        ..createSync(recursive: true)
+        ..writeAsStringSync('made up');
+      final unlocked = appLock;
+      addTearDown(() => appLock = unlocked);
+      final first = copy('first'), second = copy('second');
+      pickKeyImagesFile = () async {
+        // The app locked while the Files sheet stayed open above it.
+        appLock = _Locked();
+        return KeyImagesFile(first.path, copy: true);
+      };
+      final session = _RecordsImports(watch(full), 'node.example:38081')
+        ..synced = true
+        ..scanned = true;
+      addTearDown(session.dispose);
+      await phone(tester);
+      await tester.pumpWidget(
+        MaterialApp(theme: darkTheme, home: KeyImagesScreen(session)),
+      );
+
+      await tester.tap(find.text('Choose file'));
+      await tester.pumpAndSettle();
+      expect(session.imported, isEmpty);
+      expect(first.existsSync(), isFalse, reason: "the app's copy is gone");
+
+      // Unlocked, the next file chosen is imported.
+      pickKeyImagesFile = () async {
+        appLock = unlocked;
+        return KeyImagesFile(second.path, copy: true);
+      };
+      await tester.tap(find.text('Choose file'));
+      await tester.pumpAndSettle();
+      expect(session.imported, ['made up']);
     });
 
     testWidgets(
@@ -3157,6 +3300,12 @@ class _OnNode extends WalletSession {
 
   @override
   final String? tor;
+}
+
+/// The lock screen up, as when the app locked while a sheet stayed above it.
+class _Locked extends AppLock {
+  @override
+  bool get locked => true;
 }
 
 /// A session that keeps what each file it is asked to import says, instead of

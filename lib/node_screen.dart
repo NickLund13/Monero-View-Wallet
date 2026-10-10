@@ -458,21 +458,28 @@ class _NodeScreenState extends State<NodeScreen> {
             'link them to your IP address. Your own node keeps that to '
             'yourself.',
           ),
+          if (_tor)
+            const Note(
+              'Over Tor, an onion node is best. With any other node the last '
+              "Tor relay sits in between, and because the app can't check "
+              "most nodes' certificates, that relay could read the key images "
+              'you import and change what the node tells the app.',
+            ),
           AppCard(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                for (final n in publicNodes[widget.network]!)
-                  _publicRow(n.host, 'Run by ${n.operator}'),
-                for (final node in _added)
+                for (final (node, who, added) in _rows)
                   _publicRow(
                     node,
-                    'Added by you',
-                    trailing: IconButton(
-                      tooltip: 'Remove from the list',
-                      onPressed: _busy ? null : () => _removeNode(node),
-                      icon: Icon(Icons.close, color: c.muted),
-                    ),
+                    who,
+                    trailing: added
+                        ? IconButton(
+                            tooltip: 'Remove from the list',
+                            onPressed: _busy ? null : () => _removeNode(node),
+                            icon: Icon(Icons.close, color: c.muted),
+                          )
+                        : null,
                   ),
                 if (_addOpen) ...[
                   const SizedBox(height: 8),
@@ -596,6 +603,22 @@ class _NodeScreenState extends State<NodeScreen> {
     );
   }
 
+  /// The public nodes' rows: the app's list, then the ones added, each with
+  /// who runs it and whether the person added it. With Tor on, onion nodes
+  /// come first: only they keep Tor's last relay out of the traffic.
+  List<(String, String, bool)> get _rows {
+    final rows = [
+      for (final n in publicNodes[widget.network]!)
+        (n.host, 'Run by ${n.operator}', false),
+      for (final node in _added) (node, 'Added by you', true),
+    ];
+    if (!_tor) return rows;
+    return [
+      ...rows.where((row) => isOnion(row.$1)),
+      ...rows.where((row) => !isOnion(row.$1)),
+    ];
+  }
+
   Widget _publicRow(String node, String who, {Widget? trailing}) {
     final speed = _speed(node);
     return _Choice(
@@ -606,6 +629,11 @@ class _NodeScreenState extends State<NodeScreen> {
         TextSpan(
           text: who,
           children: [
+            if (_tor && !isOnion(node))
+              TextSpan(
+                text: ' · a Tor relay can read it',
+                style: TextStyle(color: context.colors.amber),
+              ),
             if (speed != null)
               TextSpan(
                 text: ' · ${speed.$1}',

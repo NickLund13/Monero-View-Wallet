@@ -284,6 +284,12 @@ typed.
   link those spends to one wallet. The shipped list is in
   `lib/node_screen.dart`, checked again by each run of the Stagenet tests
   workflow.
+- With Connect over Tor on, the onion nodes come first, the other public nodes
+  say "a Tor relay can read it" (amber) after the operator, and a note says
+  why: with a node that isn't an onion node the last Tor relay sits in
+  between, and as the app can't check most nodes' certificates it could read
+  the key images imported and change the node's answers. Any node can still
+  be picked (the owner's decision of 2026-10-10).
 - A node whose height doesn't fit the wallet's network (more than 500,000
   blocks from where that chain should be by the date) is refused by Test,
   Start sync and Save.
@@ -599,8 +605,11 @@ its limits.
     `tor_run_main`) on a thread of its own, with the command line from
     `inAppTorArguments` in `lib/tor.dart`. Tor starts off the network.
   - Progress and stopping: `lib/tor.dart` signs in to Tor's control port
-    (127.0.0.1:19051) with the cookie Tor writes into its folder, turns the
-    network on, and asks `GETINFO status/bootstrap-phase` each second. Tor's
+    (`ControlPort auto`: a free port Tor picks and writes to `control_port`
+    in its folder, so nothing can hold it first) with the cookie Tor writes
+    there too, turns the network on, checks with `GETINFO
+    net/listeners/socks` that Tor opened the SOCKS port the app uses, and
+    asks `GETINFO status/bootstrap-phase` each second. Tor's
     API warns against running it twice in one process, so stopping is
     `SETCONF DisableNetwork=1`, which closes the SOCKS port and every
     connection, and starting again turns the network back on.

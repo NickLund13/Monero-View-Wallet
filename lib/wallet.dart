@@ -127,6 +127,10 @@ const _addedNote = 'mvw.added';
 const _restoreHeightNote = 'mvw.restoreHeight';
 const _lookaheadNote = 'mvw.lookahead';
 
+/// A node that is never reached: a port on this device that nothing listens
+/// on, which Tor also refuses to connect to. See [ViewWallet.connect].
+const _nowhere = '127.0.0.1:1';
+
 /// "1.5000" for 1500000000000 atomic units: 4 decimals, and more only when the
 /// amount needs them to be exact. [short] cuts to 4 decimals whatever is left.
 String formatXmr(int atomic, {bool short = false}) {
@@ -300,7 +304,8 @@ class ViewWallet {
   /// The height [node] ("host:port") reports, 0 if it can't be reached, and
   /// how many milliseconds it took to connect and answer. Uses the wallet
   /// library's own connection, with no wallet involved, made through the Tor
-  /// proxy [tor] if one is given.
+  /// proxy [tor] if one is given, and only while the app's own Tor is
+  /// [BuiltInTor.ready]: otherwise nothing is asked.
   ///
   /// The library has one such connection, so probes run one at a time. They
   /// take turns in the root zone: a caller's zone that stops running, as a
@@ -314,6 +319,7 @@ class ViewWallet {
         }
         _probing = true;
         try {
+          if (tor != null && !builtInTor.ready) return (height: 0, ms: 0);
           final manager = MoneroWalletManagerFactory().getWalletManager();
           final address = manager.ffiAddress();
           return await Isolate.run(() async {
@@ -449,10 +455,10 @@ class ViewWallet {
       );
     }
     // Neither call contacts the node: the sync thread does, once it runs. With
-    // a proxy it only ever connects through it, so until Tor is running the
-    // node can't be reached; it is never asked directly instead.
+    // a proxy it only ever connects through it, and it runs only once the
+    // app's Tor is ready (see [followTor]); the node is never asked directly
+    // instead.
     wallet.init(daemonAddress: node, proxyAddress: tor ?? '');
-    wallet.startRefresh();
     final added = wallet.getCacheAttribute(key: _addedNote);
     return ViewWallet._(manager, wallet, saved: true)
       .._node = node
@@ -461,7 +467,8 @@ class ViewWallet {
         for (final host in added.split(' '))
           if (host.isNotEmpty) host,
       ]
-      .._lookahead = lookahead ?? defaultLookahead;
+      .._lookahead = lookahead ?? defaultLookahead
+      .._sync();
   }
 
   /// "50:1000" as kept by [setLookahead], or null for anything else.
@@ -642,7 +649,9 @@ class ViewWallet {
   ///
   /// With [tor], the address of Tor's SOCKS proxy ([torAddress]), every
   /// connection to the node is made by that Tor, which also looks up the
-  /// node's name. wallet2 has no direct connection to fall back to.
+  /// node's name. wallet2 has no direct connection to fall back to. Start the
+  /// app's own Tor first: until it is [BuiltInTor.ready] this throws, and
+  /// later the wallet syncs only while it stays ready (see [followTor]).
   ///
   /// A node whose height doesn't fit the wallet's network (see [onNetwork])
   /// is refused like one that can't be reached: scanning another network's
@@ -651,48 +660,71 @@ class ViewWallet {
   /// A saved wallet remembers the node and the proxy for [openSaved], and
   /// [added] as [addedNodes] when it is given.
   Future<int> connect(String node, {String? tor, List<String>? added}) async {
+    if (tor != null && !builtInTor.ready) {
+      throw WalletException("Can't reach the node over Tor.");
+    }
     final previous = _node;
     final previousTor = _tor;
+    final askPrevious = previousTor == null || builtInTor.ready;
     final saved = _saved;
-    final tip = await _inTurn((w) {
-      Never refuse(String problem) {
-        if (previous != null) {
-          w.init(daemonAddress: previous, proxyAddress: previousTor ?? '');
-          w.connected(); // wallet2 only notices it is back when asked
+    // The sync thread starts no request until the node is settled.
+    _holds++;
+    _sync();
+    try {
+      final tip = await _inTurn((w) {
+        // wallet2 sets the proxy before the node, so a request made in
+        // between would go to the old node the new way. Leaving Tor, it is
+        // first given a node that is never reached, so a node reached
+        // through Tor is never asked directly, nor an onion name looked up.
+        bool point(String to, String? through, {required String? from}) {
+          if (from != null && through == null) {
+            w.init(daemonAddress: _nowhere, proxyAddress: from);
+          }
+          return w.init(daemonAddress: to, proxyAddress: through ?? '');
         }
-        throw WalletException(problem);
-      }
 
-      if (!w.init(daemonAddress: node, proxyAddress: tor ?? '')) {
-        throw WalletException(w.errorString());
-      }
-      if (w.connected() != 1) {
-        refuse(
-          tor == null
-              ? "Can't reach the node."
-              : "Can't reach the node over Tor.",
-        );
-      }
-      final tip = w.daemonBlockChainHeight();
-      final network = Network.values.firstWhere((n) => n.id == w.nettype());
-      if (!onNetwork(network, tip)) {
-        refuse("That isn't a ${network.name} node, or it is far from synced.");
-      }
-      if (saved) {
-        w.setCacheAttribute(key: _nodeNote, value: node);
-        w.setCacheAttribute(key: _torNote, value: tor ?? '');
-        if (added != null) {
-          w.setCacheAttribute(key: _addedNote, value: added.join(' '));
+        Never refuse(String problem) {
+          if (previous != null) {
+            point(previous, previousTor, from: tor);
+            // wallet2 only notices it is back when asked.
+            if (askPrevious) w.connected();
+          }
+          throw WalletException(problem);
         }
-        w.store();
-      }
-      w.startRefresh();
+
+        if (!point(node, tor, from: previousTor)) refuse(w.errorString());
+        if (w.connected() != 1) {
+          refuse(
+            tor == null
+                ? "Can't reach the node."
+                : "Can't reach the node over Tor.",
+          );
+        }
+        final tip = w.daemonBlockChainHeight();
+        final network = Network.values.firstWhere((n) => n.id == w.nettype());
+        if (!onNetwork(network, tip)) {
+          refuse(
+            "That isn't a ${network.name} node, or it is far from synced.",
+          );
+        }
+        if (saved) {
+          w.setCacheAttribute(key: _nodeNote, value: node);
+          w.setCacheAttribute(key: _torNote, value: tor ?? '');
+          if (added != null) {
+            w.setCacheAttribute(key: _addedNote, value: added.join(' '));
+          }
+          w.store();
+        }
+        return tip;
+      });
+      _node = node;
+      _tor = torProxy = tor;
+      if (added != null) _added = List.unmodifiable(added);
       return tip;
-    });
-    _node = node;
-    _tor = torProxy = tor;
-    if (added != null) _added = List.unmodifiable(added);
-    return tip;
+    } finally {
+      _holds--;
+      _sync();
+    }
   }
 
   /// A small value kept under [name] inside the wallet's encrypted cache file
@@ -718,9 +750,11 @@ class ViewWallet {
     });
   }
 
-  /// The node's height, or 0 if it can't be reached. wallet2 asks the node at
-  /// most every 30 seconds.
-  Future<int> nodeHeight() => _blocking((w) => w.daemonBlockChainHeight());
+  /// The node's height, or 0 if it can't be reached, or while the wallet
+  /// waits for Tor. wallet2 asks the node at most every 30 seconds.
+  Future<int> nodeHeight() => _waitingForTor
+      ? Future.value(0)
+      : _blocking((w) => w.daemonBlockChainHeight());
 
   /// Imports a key images file exported by the Monero GUI or CLI, so spends of
   /// those outputs are subtracted from the balance.
@@ -749,21 +783,20 @@ class ViewWallet {
       _importKeyImages((w) => w.importKeyImagesUR(code));
 
   Future<void> _importKeyImages(bool Function(Wallet2Wallet wallet) import) {
-    final syncing = _node != null;
-    return _inTurn((w) {
-      if (syncing) {
-        // Keep the sync thread out of the wallet during the import. refresh()
-        // shares a lock with it, so it returns once the thread has let go.
-        w.pauseRefresh();
-        w.refresh();
-      }
+    if (_waitingForTor) {
+      return Future.error(WalletException("Can't reach the node over Tor."));
+    }
+    // Keep the sync thread out of the wallet during the import.
+    return _withoutSync((w, running) {
+      // refresh() shares a lock with the thread, so it returns once the
+      // thread has let go.
+      if (running) w.refresh();
       final wasTrusted = w.trustedDaemon();
       w.setTrustedDaemon(arg: true);
       try {
         if (!import(w)) throw WalletException(w.errorString());
       } finally {
         w.setTrustedDaemon(arg: wasTrusted);
-        if (syncing) w.startRefresh();
       }
     });
   }
@@ -776,43 +809,35 @@ class ViewWallet {
   /// encrypts them with the view key, so only a device that has it can read
   /// them.
   Future<OutputsQr> outputsQr() {
-    final syncing = _node != null;
-    return _inTurn((w) {
-      // Keep the sync thread out of the outputs; see importKeyImages.
-      if (syncing) {
-        w.pauseRefresh();
-        w.refresh();
-      }
-      try {
-        List<String> parts({required bool all}) {
-          // Each part on a line of its own; empty only if the export failed.
-          final text = w.exportOutputsUR(
-            max_fragment_length: qrFragmentLength,
-            all: all,
-          );
-          final parts = [
-            for (final part in text.split('\n'))
-              if (part.isNotEmpty) part,
-          ];
-          if (parts.isEmpty) throw WalletException(w.errorString());
-          return parts;
-        }
-
-        final coins = w.coins()..refresh();
-        final count = coins.count();
-        var first = 0;
-        while (first < count && coins.coin(first).keyImageKnown()) {
-          first++;
-        }
-        return (
-          fresh: parts(all: false),
-          freshCount: count - first,
-          all: parts(all: true),
-          count: count,
+    // Keep the sync thread out of the outputs; see importKeyImages.
+    return _withoutSync((w, running) {
+      if (running) w.refresh();
+      List<String> parts({required bool all}) {
+        // Each part on a line of its own; empty only if the export failed.
+        final text = w.exportOutputsUR(
+          max_fragment_length: qrFragmentLength,
+          all: all,
         );
-      } finally {
-        if (syncing) w.startRefresh();
+        final parts = [
+          for (final part in text.split('\n'))
+            if (part.isNotEmpty) part,
+        ];
+        if (parts.isEmpty) throw WalletException(w.errorString());
+        return parts;
       }
+
+      final coins = w.coins()..refresh();
+      final count = coins.count();
+      var first = 0;
+      while (first < count && coins.coin(first).keyImageKnown()) {
+        first++;
+      }
+      return (
+        fresh: parts(all: false),
+        freshCount: count - first,
+        all: parts(all: true),
+        count: count,
+      );
     });
   }
 
@@ -826,11 +851,12 @@ class ViewWallet {
   /// Saving the wallet afterwards keeps the new restore height (see
   /// [openSaved]) with the emptied wallet.
   Future<void> rescan(int from) async {
-    if (_node == null) throw WalletException("Can't reach the node.");
-    return _inTurn((w) {
+    if (_node == null || _waitingForTor) {
+      throw WalletException("Can't reach the node.");
+    }
+    return _withoutSync((w, running) {
       // Keep the sync thread out of the wallet; see importKeyImages.
-      w.pauseRefresh();
-      w.refresh();
+      if (running) w.refresh();
       final before = w.getRefreshFromBlockHeight();
       // An empty wallet holds only the genesis block. One that hasn't listed
       // any block yet only needs the new height.
@@ -850,7 +876,6 @@ class ViewWallet {
       if (emptied) {
         w.setCacheAttribute(key: _restoreHeightNote, value: '$from');
       }
-      w.startRefresh();
       if (!emptied) throw WalletException("Can't reach the node.");
     });
   }
@@ -863,14 +888,10 @@ class ViewWallet {
     if (!validLookahead(lookahead)) {
       throw ArgumentError.value(lookahead, 'lookahead');
     }
-    final syncing = _node != null;
     _lookahead = lookahead;
-    return _inTurn((w) {
-      // wallet2 adds the new subaddresses to the table its sync thread reads.
-      if (syncing) {
-        w.pauseRefresh();
-        w.refresh();
-      }
+    // wallet2 adds the new subaddresses to the table its sync thread reads.
+    return _withoutSync((w, running) {
+      if (running) w.refresh();
       w.setSubaddressLookahead(
         major: lookahead.accounts,
         minor: lookahead.addresses,
@@ -881,9 +902,65 @@ class ViewWallet {
             ? ''
             : '${lookahead.accounts}:${lookahead.addresses}',
       );
-      if (syncing) w.startRefresh();
     });
   }
+
+  /// Tells the wallet that the app's own Tor connected or stopped. A wallet
+  /// that reaches its node through Tor syncs only while Tor is
+  /// [BuiltInTor.ready]: before that, or after it stops, whatever listens on
+  /// Tor's port may not be Tor. WalletSession calls it whenever Tor changes.
+  void followTor() => _sync();
+
+  /// True while the node is reached through Tor and the app's own Tor isn't
+  /// ready. Nothing may reach the node then.
+  bool get _waitingForTor => _tor != null && !builtInTor.ready;
+
+  /// Whether wallet2's sync thread was last told to run.
+  bool _syncing = false;
+
+  /// How many calls need the sync thread out of the wallet.
+  int _holds = 0;
+
+  /// Lets wallet2's sync thread run once the wallet has a node, unless a call
+  /// needs it out of the way or the wallet waits for Tor. While it waits for
+  /// Tor, a scan in progress also stops before its next request, the sync
+  /// thread's or that of a call already holding it (an import or a rescan).
+  void _sync() {
+    if (_closing != null || _node == null) return;
+    final run = _holds == 0 && !_waitingForTor;
+    if (run != _syncing) {
+      _syncing = run;
+      if (run) {
+        _wallet.startRefresh();
+      } else {
+        _wallet.pauseRefresh();
+      }
+    }
+    if (_waitingForTor) _wallet.stop();
+  }
+
+  /// [_inTurn] with the sync thread paused until [call] is done. [call] is
+  /// told whether the thread was running, and so may still be finishing a
+  /// scan.
+  Future<T> _withoutSync<T>(
+    T Function(Wallet2Wallet wallet, bool running) call,
+  ) {
+    final running = _syncing;
+    _holds++;
+    _sync();
+    return _inTurn(_told(call, running)).whenComplete(() {
+      _holds--;
+      _sync();
+    });
+  }
+
+  /// [call] told [running], made outside the instance so that the closure
+  /// sent to the helper isolate holds nothing else.
+  static T Function(Wallet2Wallet wallet) _told<T>(
+    T Function(Wallet2Wallet wallet, bool running) call,
+    bool running,
+  ) =>
+      (w) => call(w, running);
 
   /// Frees the wallet, after any call still running on a helper isolate has
   /// finished with it. What was scanned since the last [save] is scanned again
