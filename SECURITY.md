@@ -11,8 +11,9 @@ reveals a person's finances. Security and privacy come before features.
    logs, screenshots, commit messages, issues or PRs. Use obviously fake values
    (for example 64 zeros) or published test vectors with a link to the source.
 2. **The app never asks for, accepts or stores a spend key or seed.**
-3. **The view key and key images live only in the iOS Keychain or encrypted
-   storage.** Never in UserDefaults, plain files, caches, backups or logs.
+3. **The view key and key images live only in the iOS Keychain, the Android
+   Keystore or encrypted storage.** Never in UserDefaults, Android's
+   SharedPreferences, plain files, caches, backups or logs.
 4. **No analytics, crash reporting, ads or tracking SDKs.**
 5. **The only network traffic is to the Monero node the user configured,
    plus the two exceptions below: the opt-in USD price lookup and Test

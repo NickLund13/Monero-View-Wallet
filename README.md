@@ -120,9 +120,9 @@ show how Tor recovers when the app comes back.
 
 ### What the app keeps on the computer
 
-The Windows and iPhone builds keep the wallet between launches. Android does
-not yet: there the wallet lives in memory only. The iPhone is described
-[further down](#what-the-app-keeps-on-an-iphone).
+Every build keeps the wallet between launches. The iPhone and Android are
+described further down: [iPhone](#what-the-app-keeps-on-an-iphone),
+[Android](#what-the-app-keeps-on-android).
 
 The wallet files, the Appearance and Show USD value choices and Tor's own
 folder are in `%LOCALAPPDATA%\MoneroViewWallet`. The password and the ring database are
@@ -324,6 +324,65 @@ sh tool/fetch_monero_c.sh   # packs the iPhone and simulator libraries as ios/Mo
 sh tool/fetch_tor.sh        # fetches Tor.framework's tor.xcframework into ios/
 flutter run                 # on a simulator; or flutter build ios --simulator
 ```
+
+## Building for Android
+
+The app builds for Android 11 and later, so far only as a test build: it
+isn't on Google Play, and it has no Tor, camera, key images file import or
+lock yet. Those follow the iPhone's. The Android build workflow (Actions >
+Android build) builds it on a GitHub Linux runner, signed only with a
+throwaway debug key, and checks the result:
+
+- The wallet library is in the app for 64-bit and 32-bit ARM phones and for
+  the emulator, and the app's native libraries work on phones with 16 KB
+  memory pages, as Google Play asks.
+- The app asks for no permission but the internet, and Android may neither
+  back it up nor move its files to a new phone.
+- A smoke test on the emulator, on Android 11 and Android 15, both without
+  Google's apps or services: the wallet library loads and runs, a throwaway
+  wallet is saved with its password under the Keystore, opens again after the
+  Keystore is read afresh, as at the next launch, and is removed. The app
+  shows its first screen, and keeps running without starting afresh when
+  Android makes its activity anew, as it does after a theme change.
+
+It runs by itself on pull requests that are ready for review and after a push
+to main, when they change the Android project, the app's code, the wallet
+library or the scripts that fetch it.
+
+With Flutter, the Android SDK and a JDK (17 or later):
+
+```sh
+sh tool/fetch_monero_c.sh android   # the Android libraries, into android/app/src/main/jniLibs
+flutter run                         # on a phone or the emulator; or flutter build apk
+```
+
+Gradle checks each file it downloads against the checksums in
+`android/gradle/verification-metadata.xml`. After Flutter or a build tool
+changes, start the Android build workflow by hand with "Write the Gradle
+checksums" on, check what it prints and commit it. The dependency scan reads
+that file too. `android/gradle/osv-scanner.toml` leaves out the build tools in
+it that never reach the app, and says why.
+
+### What the app keeps on Android
+
+The same as on the iPhone, in the app's own storage, which other apps can't
+read:
+
+- **The wallet's two files and the Appearance and Show USD value choices**, in
+  `no_backup/MoneroViewWallet`: the app's folder that Android never backs up.
+  The app also turns backups off altogether and leaves every file out of a
+  transfer to a new phone. A copy of the files could never be opened anyway,
+  because the password's key never leaves the phone.
+- **The wallet's password** and its network, as "Monero View Wallet: wallet",
+  in `no_backup/secrets`, encrypted (AES-GCM) with a key that the Android
+  Keystore makes and keeps, on most phones in their secure hardware. The key
+  can't be read out of the phone, backed up or moved to another phone.
+- **Monero's ring database**, in `no_backup/.shared-ringdb` (in its
+  `stagenet` folder for a stagenet wallet). The wallet library keeps it in
+  the home folder, which the app sets to `no_backup` (`MainActivity.kt`).
+
+Remove wallet deletes the password, then both files, and empties the ring
+database. Deleting the app deletes all of it, the Keystore's key included.
 
 ## Security
 

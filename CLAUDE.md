@@ -80,5 +80,12 @@ for every change; read them before writing code:
   list (`ios/`, the dependencies, the fetch scripts, the smoke test, the
   flutter-setup action, or the workflow). On such a PR, wait for that run
   before merging and say in the PR whether it passed.
+- The Android build workflow builds the app for Android, checks the APK and
+  runs a smoke test on the Android emulator. It runs by itself after a push
+  to main, and on a PR once it is ready for review, when the change touches a
+  path its triggers list (`android/`, `lib/`, `assets/`, the dependencies, the
+  monero_c fetch script, the smoke test, the flutter-setup action, or the
+  workflow). On such a PR, wait for that run before merging and say in the PR
+  whether it passed.
 - New dependency or GitHub Action: pin the exact version (Actions by commit
   SHA), verify downloads by checksum, and justify it in the PR.

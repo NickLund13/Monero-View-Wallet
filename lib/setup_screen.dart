@@ -346,8 +346,12 @@ class _SetupScreenState extends State<SetupScreen> {
                 inputFormatters: [_notePaste],
                 minLines: 2,
                 maxLines: 3,
+                // Keeps the address out of the keyboard's memory and out of
+                // password managers (Android).
                 autocorrect: false,
                 enableSuggestions: false,
+                enableIMEPersonalizedLearning: false,
+                autofillHints: null,
                 style: mono(size: 13),
               ),
               if (_addressError != null) _Problem(_addressError!),
@@ -367,8 +371,12 @@ class _SetupScreenState extends State<SetupScreen> {
                 onChanged: _typedViewKey,
                 inputFormatters: [_notePaste],
                 obscureText: true,
+                // A hidden field looks like a password: never offer to save
+                // the key in a password manager (Android).
                 autocorrect: false,
                 enableSuggestions: false,
+                enableIMEPersonalizedLearning: false,
+                autofillHints: null,
                 style: mono(size: 13),
               ),
               if (_viewKeyError != null) _Problem(_viewKeyError!),

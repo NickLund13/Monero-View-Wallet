@@ -10,6 +10,11 @@
 # On a Mac (and in the iOS build workflow) it fetches the iPhone and iOS
 # simulator libraries into ios/monero_c/ and packs them as
 # ios/MoneroWallet.xcframework, which the Xcode project embeds in the app.
+# With the argument "android", on any of them, it fetches the Android
+# libraries instead, one for each kind of processor the Android build is made
+# for, into android/app/src/main/jniLibs/, from where the build puts them in
+# the app:
+#   sh tool/fetch_monero_c.sh android
 set -eu
 
 # monero_c v0.18.4.6-RC2 = commit 3bfb3856a838f2bf6b729501837bb0295dedf25d.
@@ -26,6 +31,13 @@ IOS_SHA256=5eb316bfbbeb3f29714387339b2cd6124260a5e86ad0e9dc09887266b897e38a
 # the Xcode project leaves x86_64 out of simulator builds (ios/Flutter/*.xcconfig).
 SIM_IN_BUNDLE=v0.18.4.6-RC2/aarch64-apple-ios-simulator/libmonero_wallet2_api_c.dylib
 SIM_SHA256=b34e2497befe3b1b6d3a7671486565d04979ab97e903fcc81cb9cd804533d4b5
+# Android phones (64-bit and 32-bit ARM) and the Android emulator on a PC.
+ARM64_IN_BUNDLE=v0.18.4.6-RC2/aarch64-linux-android/libmonero_wallet2_api_c.so
+ARM64_SHA256=0ebd46d3adf41692ff84efc1fbdbe5d287dea944a7c455f4a45f2680ce7b8cdc
+ARM32_IN_BUNDLE=v0.18.4.6-RC2/armv7a-linux-androideabi/libmonero_wallet2_api_c.so
+ARM32_SHA256=6a03dae018c702db3ab0d85b1182105b7a6821d4e95564d3f89ae860adeec319
+X64_IN_BUNDLE=v0.18.4.6-RC2/x86_64-linux-android/libmonero_wallet2_api_c.so
+X64_SHA256=019e7dddcb4bcb76167426d4a4765e41e5e6217555850f519ac985e527f4dc80
 
 # The DLL links to the MinGW thread runtime (libwinpthread-1.dll), which the
 # monero_c bundle leaves out. monero_c builds with GCC 15.2.0 and MinGW-w64
@@ -163,6 +175,16 @@ EOF
   rm -rf ios/MoneroWallet.xcframework
   xcodebuild -create-xcframework "$@" -output ios/MoneroWallet.xcframework >/dev/null
 }
+
+if [ "${1:-}" = android ]; then
+  # Android's names for the three kinds of processor.
+  jni=android/app/src/main/jniLibs
+  fetch "$BUNDLE_URL" "$BUNDLE_SHA256" "$ARM64_IN_BUNDLE" "$ARM64_SHA256" "$jni/arm64-v8a"
+  fetch "$BUNDLE_URL" "$BUNDLE_SHA256" "$ARM32_IN_BUNDLE" "$ARM32_SHA256" "$jni/armeabi-v7a"
+  fetch "$BUNDLE_URL" "$BUNDLE_SHA256" "$X64_IN_BUNDLE" "$X64_SHA256" "$jni/x86_64"
+  echo "monero_c is ready in $jni"
+  exit 0
+fi
 
 case "$(uname -s)" in
   Linux)

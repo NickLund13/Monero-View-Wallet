@@ -395,8 +395,10 @@ class _NodeScreenState extends State<NodeScreen> {
                     _public = null;
                     _test = null;
                   }),
+                  // Keeps the node out of the keyboard's memory (Android).
                   autocorrect: false,
                   enableSuggestions: false,
+                  enableIMEPersonalizedLearning: false,
                   style: mono(),
                   decoration: InputDecoration(
                     hintText: '192.168.1.20:${mainnet ? 18081 : 38081}',
@@ -490,8 +492,10 @@ class _NodeScreenState extends State<NodeScreen> {
                     autofocus: true,
                     onChanged: (_) => setState(() {}),
                     onSubmitted: (_) => _addNode(),
+                    // Keeps the node out of the keyboard's memory (Android).
                     autocorrect: false,
                     enableSuggestions: false,
+                    enableIMEPersonalizedLearning: false,
                     style: mono(),
                     decoration: InputDecoration(
                       hintText: 'node.example.org:${mainnet ? 18089 : 38089}',

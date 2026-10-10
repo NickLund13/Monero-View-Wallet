@@ -1,3 +1,7 @@
 # Hook scripts must keep LF endings or they fail on Windows checkouts.
 .githooks/* text eol=lf
 tool/*.sh text eol=lf
+# The Gradle wrapper's scripts, which need their own line endings, and its jar.
+android/gradlew text eol=lf
+android/gradlew.bat text eol=crlf
+*.jar binary

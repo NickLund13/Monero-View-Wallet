@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- The app's dark background (lib/ui.dart). -->
+    <color name="launch_background">#101113</color>
+</resources>

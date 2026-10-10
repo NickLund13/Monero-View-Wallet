@@ -32,7 +32,7 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   final out = File('${Directory.systemTemp.path}/ios_smoke.txt');
   out.writeAsStringSync('wallet library: ${_walletLibrary()}\n');
-  keepOnDevice();
+  await keepOnDevice();
   out.writeAsStringSync('keychain: ${_keychain()}\n', mode: FileMode.append);
   out.writeAsStringSync(
     'saved wallet: ${await _savedWallet()}\n',

@@ -1,0 +1,18 @@
+# The Gradle wrapper (gradlew, gradlew.bat and gradle/wrapper/) is committed:
+# its jar is Gradle's own, checked against the checksum Gradle publishes by the
+# Android build workflow, and it checks the Gradle download against the
+# checksum in gradle-wrapper.properties.
+/.gradle
+/captures/
+/local.properties
+GeneratedPluginRegistrant.java
+.cxx/
+.kotlin/
+
+# The wallet library, downloaded by tool/fetch_monero_c.sh
+/app/src/main/jniLibs/
+
+# Never commit a signing key. See https://flutter.dev/to/reference-keystore
+key.properties
+**/*.keystore
+**/*.jks

@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The icon's orange eye, from the SVG, its 1024 canvas drawn on the middle
+     72dp of the 108dp layer. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="1536"
+    android:viewportHeight="1536">
+    <group android:translateX="256" android:translateY="256">
+        <path
+            android:pathData="M172,512 A389,389 0 0,1 852,512 A389,389 0 0,1 172,512 Z"
+            android:strokeColor="#F26822"
+            android:strokeWidth="58"
+            android:strokeLineJoin="round"/>
+        <path
+            android:pathData="M370,512 a142,142 0 1,0 284,0 a142,142 0 1,0 -284,0 z"
+            android:fillColor="#F26822"/>
+        <path
+            android:pathData="M450,512 a62,62 0 1,0 124,0 a62,62 0 1,0 -124,0 z"
+            android:fillColor="#101113"/>
+        <path
+            android:pathData="M531,474 a19,19 0 1,0 38,0 a19,19 0 1,0 -38,0 z"
+            android:fillColor="#F26822"/>
+    </group>
+</vector>

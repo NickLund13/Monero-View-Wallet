@@ -1,0 +1,45 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- For the Monero node, and the opt-in price lookup and Test speed
+         (SECURITY.md rule 5). The app asks for no other permission. -->
+    <uses-permission android:name="android.permission.INTERNET"/>
+
+    <!-- Nothing the app keeps leaves the phone with a backup or a transfer
+         to a new phone: the wallet's password is encrypted with a key that
+         stays in this phone's Keystore, so a copy of the files could never
+         be opened anyway. -->
+    <application
+        android:label="Monero View"
+        android:name="${applicationName}"
+        android:icon="@mipmap/ic_launcher"
+        android:allowBackup="false"
+        android:fullBackupContent="false"
+        android:dataExtractionRules="@xml/data_extraction_rules">
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:launchMode="singleTop"
+            android:taskAffinity=""
+            android:theme="@style/LaunchTheme"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
+            android:hardwareAccelerated="true"
+            android:windowSoftInputMode="adjustResize">
+            <!-- The theme of the window behind the Flutter UI once it has
+                 drawn its first frame. -->
+            <meta-data
+              android:name="io.flutter.embedding.android.NormalTheme"
+              android:resource="@style/NormalTheme"
+              />
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN"/>
+                <category android:name="android.intent.category.LAUNCHER"/>
+            </intent-filter>
+        </activity>
+        <!-- Used by the Flutter tool to generate GeneratedPluginRegistrant.java. -->
+        <meta-data
+            android:name="flutterEmbedding"
+            android:value="2" />
+    </application>
+    <!-- Flutter's template also asks to see the apps that process selected
+         text, which adds them to the text selection menu. Left out: selected
+         text (an address, a node) would go to whichever app is picked. -->
+</manifest>

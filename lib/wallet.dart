@@ -97,17 +97,18 @@ const maxLookahead = 100000;
 /// means nothing is saved and every wallet lives in memory only. main() sets it.
 String? walletFile;
 
-/// wallet2's ring database on the iPhone (see the README), which only this
-/// app's wallets use, so [ViewWallet.forgetSaved] empties it. Null where the
-/// app doesn't own it: the Windows build shares the Monero GUI's. main() sets
-/// it.
+/// wallet2's ring database on the iPhone and on Android (see the README),
+/// which only this app's wallets use, so [ViewWallet.forgetSaved] empties it.
+/// Null where the app doesn't own it: the Windows build shares the Monero
+/// GUI's. main() sets it.
 String? ringDatabase;
 
 /// What the password is filed under in the device's secure storage: the
 /// wallet file's path on Windows. An iPhone app's folder moves when the app is
-/// updated, so there it is the file's name only.
+/// updated, and an Android app's when it is moved to an SD card, so on phones
+/// it is the file's name only.
 String _passwordName(String walletFile) =>
-    'Monero View Wallet: ${Platform.isIOS ? walletFile.split('/').last : walletFile}';
+    'Monero View Wallet: ${Platform.isIOS || Platform.isAndroid ? walletFile.split('/').last : walletFile}';
 
 /// The name the node is remembered under, see [ViewWallet.remembered].
 const _nodeNote = 'mvw.node';

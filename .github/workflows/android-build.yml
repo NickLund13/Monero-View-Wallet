@@ -1,0 +1,134 @@
+# Builds the app for Android, signed only with a throwaway debug key, to show
+# that the Android project, the Dart code and the monero_c wallet library build
+# together. tool/check_android_apk.sh then checks the release APK: the wallet
+# library is in it for each kind of processor, its native libraries suit
+# phones with 16 KB memory pages, it asks for no permission but the internet,
+# and Android may not back it up.
+# Then it runs a smoke test on the Android emulator, on the oldest Android the
+# app supports and on a recent one, both without Google's apps or services:
+# tool/android_smoke.dart calls the wallet library with obviously fake input,
+# saves a throwaway wallet with its password in the Keystore, opens it again
+# after reading the Keystore afresh and removes it, and opens the app's first
+# screen. tool/android_smoke.sh then has Android make the app's activity anew,
+# as it does after a theme change, and checks that the app keeps running
+# without starting its Dart code again.
+#
+# Gradle checks every file it downloads (the Android and Kotlin build tools,
+# the libraries Flutter's Android code uses) against the checksums in
+# android/gradle/verification-metadata.xml, and its own download against the
+# one in android/gradle/wrapper/gradle-wrapper.properties. When Flutter or a
+# build tool changes, start this workflow by hand with "Write the Gradle
+# checksums" on: it prints the file for the new versions, to be checked and
+# committed.
+#
+# It runs by itself on pull requests and after a push to main that change the
+# Android project, the app's Dart code, the dependencies, the fetch script, the
+# smoke test or this workflow (the paths under on:). Draft pull requests are
+# skipped, like the other checks. It can also be started by hand (Actions >
+# Android build > Run workflow, on any branch). Linux runners cost nothing on
+# this public repository.
+
+name: Android build
+
+on:
+  workflow_dispatch:
+    inputs:
+      write_checksums:
+        description: Write the Gradle checksums (prints verification-metadata.xml)
+        type: boolean
+        default: false
+  push:
+    branches: [main]
+    paths:
+      - android/**
+      - lib/**
+      - assets/**
+      - pubspec.yaml
+      - pubspec.lock
+      - tool/fetch_monero_c.sh
+      - tool/android_smoke.dart
+      - tool/android_smoke.sh
+      - tool/check_android_apk.sh
+      - .github/actions/flutter-setup/**
+      - .github/workflows/android-build.yml
+  pull_request:
+    types: [opened, ready_for_review, reopened, synchronize]
+    paths: # the same as for push
+      - android/**
+      - lib/**
+      - assets/**
+      - pubspec.yaml
+      - pubspec.lock
+      - tool/fetch_monero_c.sh
+      - tool/android_smoke.dart
+      - tool/android_smoke.sh
+      - tool/check_android_apk.sh
+      - .github/actions/flutter-setup/**
+      - .github/workflows/android-build.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  # Per event too, so an automatic run never cancels a run started by hand.
+  group: android-build-${{ github.ref }}-${{ github.event_name }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Android build and emulator smoke test
+    if: ${{ github.event_name != 'pull_request' || !github.event.pull_request.draft }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/flutter-setup
+      - name: Fetch the Android wallet library (pinned, checksum verified)
+        run: sh tool/fetch_monero_c.sh android
+      # Gradle's own wrapper jar: the checksum Gradle publishes for it.
+      - name: Check the Gradle wrapper
+        run: echo "7d3a4ac4de1c32b59bc6a4eb8ecb8e612ccd0cf1ae1e99f66902da64df296172  android/gradle/wrapper/gradle-wrapper.jar" | sha256sum -c -
+
+      # Also when the file is missing, as before it was first written.
+      - name: Write the Gradle checksums
+        if: ${{ inputs.write_checksums || hashFiles('android/gradle/verification-metadata.xml') == '' }}
+        run: |
+          flutter build apk --config-only
+          cd android
+          rm -f gradle/verification-metadata.xml
+          ./gradlew --no-daemon --write-verification-metadata sha256 help assembleDebug assembleProfile assembleRelease
+          ./gradlew --no-daemon :app:dependencies --configuration releaseRuntimeClasspath
+          echo "verification-metadata.xml, gzipped, in base64:"
+          gzip -9c gradle/verification-metadata.xml | base64 -w 0
+          echo
+
+      - name: Build for Android (release)
+        run: flutter build apk --release
+      - name: Check the app
+        run: sh tool/check_android_apk.sh build/app/outputs/flutter-apk/app-release.apk
+
+      - name: Build the smoke test for the emulator (release)
+        run: |
+          flutter build apk --release -t tool/android_smoke.dart --target-platform android-x64
+          mv build/app/outputs/flutter-apk/app-release.apk "$RUNNER_TEMP/android_smoke.apk"
+      - name: Let the emulator use the processor's virtualization
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Run the smoke test on Android 11
+        uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
+        with:
+          api-level: 30
+          target: default
+          arch: x86_64
+          script: sh tool/android_smoke.sh "$RUNNER_TEMP/android_smoke.apk"
+      - name: Run the smoke test on Android 15
+        uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
+        with:
+          api-level: 35
+          target: default
+          arch: x86_64
+          script: sh tool/android_smoke.sh "$RUNNER_TEMP/android_smoke.apk"

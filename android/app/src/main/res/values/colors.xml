@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- The app's light background (lib/ui.dart), as on the iPhone's launch
+         screen. -->
+    <color name="launch_background">#F4F4F1</color>
+</resources>
