@@ -584,10 +584,10 @@ its limits.
 - Built-in Tor is marked experimental. Before that label comes off: bridges
   for networks that block Tor, a way to see why Tor failed, and more than the
   one nightly test against the real Tor network.
-- Before the App Store: publish the app's source, the simplest way to meet
-  the wallet library's LGPL-3.0 (decided 2026-10-10: GPL-3.0 with an App
-  Store permission). Whether App Store terms and the LGPL fit together at all
-  is disputed; see [app-store.md](../app-store.md#the-wallet-librarys-lgpl).
+- The app's source is public since 2026-10-10 (GPL-3.0 with an App Store
+  permission), the simplest way to meet the wallet library's LGPL-3.0.
+  Whether App Store terms and the LGPL fit together at all is still disputed;
+  see [app-store.md](../app-store.md#the-wallet-librarys-lgpl).
 - Key images by QR: scanning can reuse the setup camera
   (`ios/Runner/QrCamera.swift`, AVFoundation, no library), but it still needs
   a UR decoder and encoder for the animated `xmr-output` and `xmr-keyimage`

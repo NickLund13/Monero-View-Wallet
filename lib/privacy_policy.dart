@@ -91,7 +91,7 @@ Apple runs the App Store, Face ID, the Keychain, the share sheet and iCloud unde
 
 ## The Windows test build
 
-This policy is about the iPhone app. A Windows build exists only for testing and is not distributed. It connects to the same places in the same way, with these differences: it keeps the wallet's files in the Windows user's AppData folder, and the password in Windows Credential Manager, where other programs running as the same Windows user can read it. It also uses the ring database the Monero GUI shares, in C:\ProgramData\.shared-ringdb, which other accounts on the computer can usually read and which Remove wallet doesn't clear.
+This policy is about the iPhone app. A Windows build exists only for testing and is not distributed. It connects to the same places in the same way, with these differences: it keeps the wallet's files in the Windows user's AppData folder, and the password in Windows Credential Manager, where other programs running as the same Windows user can read it. It also uses the ring database the Monero GUI shares, in the .shared-ringdb folder in C:\ProgramData, which other accounts on the computer can usually read and which Remove wallet doesn't clear.
 
 ## Changes to this policy
 

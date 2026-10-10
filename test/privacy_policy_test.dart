@@ -45,13 +45,36 @@ void main() {
     expect(blocks.where((b) => b.$1 == Block.title), hasLength(1));
     for (final (_, text) in blocks) {
       expect('**'.allMatches(text).length.isEven, isTrue, reason: text);
-      // Links, code, emphasis with _ or a single *, numbered lists, HTML.
+      // Links, code, emphasis with _ or a single *, numbered lists, HTML,
+      // and backslash escapes, which the web page would drop the backslash
+      // of but the app would show.
       expect(
         text,
-        isNot(contains(RegExp(r'\]\(|`|(^|\s)[_*]\w|^\d+\. |<'))),
+        isNot(
+          contains(RegExp(r'\]\(|`|(^|\s)[_*]\w|^\d+\. |<|\\[!-/:-@\[-`{-~]')),
+        ),
         reason: text,
       );
     }
+  });
+
+  test('the web page of the policy loads nothing from other sites', () {
+    // GitHub Pages builds docs/ with its default theme, whose own layout
+    // loads a script from a CDN; docs/_layouts/default.html replaces it.
+    final layout = File('docs/_layouts/default.html').readAsStringSync();
+    expect(layout, isNot(contains('<script')));
+    expect(layout, isNot(contains('<iframe')));
+    expect(layout, isNot(contains(RegExp(r'(src|href)="(https?:)?//'))));
+    expect(layout, isNot(contains(RegExp(r'\{%-?\s*include'))));
+    final config = File('docs/_config.yml').readAsStringSync();
+    expect(
+      config,
+      isNot(
+        contains(
+          RegExp(r'^\s*(remote_theme|google_analytics)', multiLine: true),
+        ),
+      ),
+    );
   });
 
   testWidgets('Setup and the Settings row open the policy', (tester) async {
