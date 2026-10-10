@@ -72,7 +72,7 @@ Show USD value is off by default. It turns on only if you turn it on in Settings
 
 ### Tor, if you turn it on
 
-Connect over Tor is off by default, and always on for an onion node. With it on, the app runs the Tor Project's own Tor inside the app. Tor connects to the Tor network's relays and directory servers, and the node, Test speed and the price request then go only through Tor, never directly. Your internet provider can see that you use Tor but not what for. Tor in this app is new and marked experimental, so don't rely on it yet to hide your IP address.
+Connect over Tor is off by default, and always on for an onion node. With it on, the app runs the Tor Project's own Tor inside the app. Tor connects to the Tor network's relays and directory servers, and the node, Test speed and the price request then go only through Tor, never directly, each host over a Tor circuit of its own. Nothing is sent until the app's own Tor is connected. Your internet provider can see that you use Tor but not what for. Tor in this app is new and marked experimental, so don't rely on it yet to hide your IP address.
 
 ### What you copy or share
 

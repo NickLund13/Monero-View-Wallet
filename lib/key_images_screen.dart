@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import 'advanced_screen.dart';
 import 'key_images_qr_screen.dart';
+import 'lock.dart';
 import 'pick_file.dart';
 import 'scan_screen.dart';
 import 'session.dart';
@@ -50,7 +51,9 @@ enum ImportProblem {
       return notKeyImages;
     }
     // Importing asks the node which key images are spent.
-    if (error.contains('daemon') || error.contains('is_key_image_spent')) {
+    if (error.contains('daemon') ||
+        error.contains('is_key_image_spent') ||
+        error.contains("Can't reach the node")) {
       return noNode;
     }
     return failed;
@@ -223,13 +226,16 @@ class _KeyImagesScreenState extends State<KeyImagesScreen> {
     setState(() => _received = file);
   }
 
-  /// Asks for a file; null if the picker was cancelled.
+  /// Asks for a file; null if the picker was cancelled. The iPhone's Files
+  /// sheet stays above the lock screen, so a file picked there after the app
+  /// locked is dropped: nothing is imported without Face ID.
   Future<KeyImagesFile?> _pick() async {
     setState(() => _choosing = true);
     try {
       final file = await pickKeyImagesFile();
-      if (!mounted) file?.discard();
-      return mounted ? file : null;
+      if (mounted && !appLock.locked) return file;
+      file?.discard();
+      return null;
     } finally {
       if (mounted) setState(() => _choosing = false);
     }

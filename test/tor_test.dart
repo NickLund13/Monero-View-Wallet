@@ -3,6 +3,7 @@
 // this computer stand in for Tor's proxy and control port, and the real tor
 // program is only started where it gives up before it connects to anything.
 
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
@@ -44,9 +45,9 @@ Future<({String address, List<String> asked})> fakeTor({int reply = 0}) async {
 /// A stand-in for the control port of the Tor inside the app. It writes a
 /// made-up cookie into [folder] as Tor would, wants it back before anything
 /// else, answers the bootstrap question with each of [progress] in turn,
-/// refuses [refuse], and notes the commands that follow the cookie. Its
-/// [sockets] are the connections made to it, and [drop] ends them as if they
-/// were lost.
+/// says it listens for SOCKS at [socks], refuses [refuse], and notes the
+/// commands that follow the cookie. Its [sockets] are the connections made to
+/// it, and [drop] ends them as if they were lost.
 Future<
   ({
     String address,
@@ -55,7 +56,12 @@ Future<
     void Function() drop,
   })
 >
-fakeControl(Directory folder, List<int> progress, {String? refuse}) async {
+fakeControl(
+  Directory folder,
+  List<int> progress, {
+  String? refuse,
+  String? socks,
+}) async {
   final cookie = List<int>.generate(32, (i) => i); // made up
   File('${folder.path}/control_auth_cookie').writeAsBytesSync(cookie);
   final hex = [for (final b in cookie) b.toRadixString(16).padLeft(2, '0')];
@@ -85,6 +91,10 @@ fakeControl(Directory folder, List<int> progress, {String? refuse}) async {
       commands.add(line);
       if (line == refuse) {
         socket.write('552 Made up\r\n');
+      } else if (line == 'GETINFO net/listeners/socks') {
+        socket.write(
+          '250-net/listeners/socks="${socks ?? torAddress}"\r\n250 OK\r\n',
+        );
       } else if (line == 'GETINFO status/bootstrap-phase') {
         final percent = progress[min(asked++, progress.length - 1)];
         socket.write(
@@ -110,6 +120,14 @@ Future<void> until(bool Function() done) async {
     await Future<void>.delayed(const Duration(milliseconds: 20));
   }
   expect(done(), isTrue);
+}
+
+/// Makes the app's Tor count as connected for this test, as it does once it
+/// has started.
+void torIsReady() {
+  final real = builtInTor;
+  builtInTor = BuiltInTor()..progress = 100;
+  addTearDown(() => builtInTor = real);
 }
 
 /// The app's own price client, as a real one (see price_test.dart).
@@ -236,9 +254,17 @@ void main() {
 
   group('the Tor inside the app (iPhone)', () {
     final realRun = runTorInApp;
-    final realControl = torControlAddress;
     late Directory dir;
     late List<List<String>> launched;
+
+    /// Where the stand-in control port listens.
+    late String controlAt;
+
+    /// Writes down [controlAt], as Tor does once it has opened the port.
+    void writePort() =>
+        File('${dir.path}/$torControlPortFile')
+            .writeAsStringSync('PORT=$controlAt\n');
+
     setUp(() {
       dir = Directory.systemTemp.createTempSync('mvw_tor');
       launched = [];
@@ -246,6 +272,7 @@ void main() {
       torFolder = dir.path;
       runTorInApp = (arguments) async {
         launched.add(arguments);
+        writePort();
         return launched.length == 1 ? 'started' : 'running';
       };
     });
@@ -253,25 +280,31 @@ void main() {
       torInApp = false;
       torFolder = null;
       runTorInApp = realRun;
-      torControlAddress = realControl;
       dir.deleteSync(recursive: true);
     });
 
     test('starts once, and stopping only takes it off the network', () async {
       final control = await fakeControl(dir, [0, 45, 100]);
-      torControlAddress = control.address;
+      controlAt = control.address;
       final tor = BuiltInTor();
       expect(await tor.start(), torAddress);
       expect(tor.ready, isTrue);
       final arguments = launched.single.join(' ');
-      expect(arguments, contains('--SocksPort $torAddress'));
-      expect(arguments, contains('--ControlPort ${control.address}'));
+      // A circuit of its own for each host.
+      expect(arguments, contains('--SocksPort $torAddress IsolateDestAddr'));
+      // A free port of Tor's choosing, written down for the app.
+      expect(arguments, contains('--ControlPort auto'));
+      expect(
+        arguments,
+        contains('--ControlPortWriteToFile ${dir.path}/$torControlPortFile'),
+      );
       expect(arguments, contains('--CookieAuthentication 1'));
       expect(arguments, contains('--DataDirectory ${dir.path}'));
       // Off the network until the app has its control connection.
       expect(arguments, contains('--DisableNetwork 1'));
       expect(control.commands, [
         'SETCONF DisableNetwork=0',
+        'GETINFO net/listeners/socks',
         for (var i = 0; i < 3; i++) 'GETINFO status/bootstrap-phase',
       ]);
 
@@ -280,8 +313,9 @@ void main() {
       await until(() => control.commands.last == 'SETCONF DisableNetwork=1');
       expect(await tor.start(), torAddress);
       expect(launched, hasLength(1));
-      expect(control.commands.reversed.take(2), [
+      expect(control.commands.reversed.take(3), [
         'GETINFO status/bootstrap-phase',
+        'GETINFO net/listeners/socks',
         'SETCONF DisableNetwork=0',
       ]);
       tor.stop();
@@ -289,7 +323,7 @@ void main() {
 
     test('a stop before it is on the network keeps it off', () async {
       final control = await fakeControl(dir, [100]);
-      torControlAddress = control.address;
+      controlAt = control.address;
       final tor = BuiltInTor();
       final starting = tor.start();
       tor.stop();
@@ -303,7 +337,7 @@ void main() {
       'a lost control connection takes it off the network over a new one',
       () async {
         final control = await fakeControl(dir, [100]);
-        torControlAddress = control.address;
+        controlAt = control.address;
         final tor = BuiltInTor();
         expect(await tor.start(), torAddress);
         control.drop();
@@ -317,8 +351,9 @@ void main() {
         // The next start puts it back on over the new connection.
         expect(await tor.start(), torAddress);
         expect(control.sockets, hasLength(2));
-        expect(control.commands.reversed.take(2), [
+        expect(control.commands.reversed.take(3), [
           'GETINFO status/bootstrap-phase',
+          'GETINFO net/listeners/socks',
           'SETCONF DisableNetwork=0',
         ]);
         tor.stop();
@@ -328,11 +363,12 @@ void main() {
 
     test('once Tor has ended, stopping asks it nothing', () async {
       final control = await fakeControl(dir, [100]);
-      torControlAddress = control.address;
+      controlAt = control.address;
       var ended = false;
       runTorInApp = (arguments) async {
         launched.add(arguments);
         if (ended) return 'exited';
+        writePort();
         return launched.length == 1 ? 'started' : 'running';
       };
       final tor = BuiltInTor();
@@ -355,7 +391,7 @@ void main() {
       final control = await fakeControl(dir, [
         100,
       ], refuse: 'SETCONF DisableNetwork=1');
-      torControlAddress = control.address;
+      controlAt = control.address;
       final tor = BuiltInTor();
       expect(await tor.start(), torAddress);
       tor.stop();
@@ -378,10 +414,12 @@ void main() {
 
     test('the control port is only used with the right cookie', () async {
       final control = await fakeControl(dir, [100]);
+      controlAt = control.address;
+      writePort();
       File('${dir.path}/control_auth_cookie').writeAsBytesSync([1, 2, 3]);
       await expectLater(
         TorControl.open(
-          control.address,
+          File('${dir.path}/$torControlPortFile'),
           File('${dir.path}/control_auth_cookie'),
           within: const Duration(milliseconds: 300),
         ),
@@ -395,9 +433,73 @@ void main() {
       );
       expect(control.commands, isEmpty);
     });
+
+    test(
+      "never trusts a control port an earlier launch's Tor wrote down",
+      () async {
+        // Something else now listens where that Tor took commands.
+        final squatter = await ServerSocket.bind(
+          InternetAddress.loopbackIPv4,
+          0,
+        );
+        addTearDown(squatter.close);
+        var squatted = 0;
+        squatter.listen((socket) {
+          squatted++;
+          socket.destroy();
+        });
+        File('${dir.path}/$torControlPortFile')
+            .writeAsStringSync('PORT=127.0.0.1:${squatter.port}\n');
+        // This launch's Tor writes its own port only a moment after it starts.
+        final control = await fakeControl(dir, [100]);
+        controlAt = control.address;
+        runTorInApp = (arguments) async {
+          launched.add(arguments);
+          Timer(const Duration(milliseconds: 600), writePort);
+          return 'started';
+        };
+        final tor = BuiltInTor();
+        expect(await tor.start(), torAddress);
+        expect(squatted, 0);
+        tor.stop();
+      },
+    );
+
+    test("refuses a SOCKS port Tor doesn't say it opened", () async {
+      final control = await fakeControl(dir, [
+        100,
+      ], socks: '127.0.0.1:1'); // made up
+      controlAt = control.address;
+      final tor = BuiltInTor();
+      await expectLater(tor.start(), throwsA(isA<TorException>()));
+      expect(tor.ready, isFalse);
+      expect(
+        tor.error,
+        "Tor couldn't open its port. Another app may be using it.",
+      );
+      expect(
+        control.commands,
+        isNot(contains('GETINFO status/bootstrap-phase')),
+      );
+    });
+
+    test("says so when Tor can't open its SOCKS port", () async {
+      final control = await fakeControl(dir, [
+        100,
+      ], refuse: 'SETCONF DisableNetwork=0');
+      controlAt = control.address;
+      final tor = BuiltInTor();
+      await expectLater(tor.start(), throwsA(isA<TorException>()));
+      expect(tor.ready, isFalse);
+      expect(
+        tor.error,
+        "Tor couldn't open its port. Another app may be using it.",
+      );
+    });
   });
 
   test('with Tor on, the price request is handed to Tor by name', () async {
+    torIsReady();
     final tor = await fakeTor();
     torProxy = tor.address;
     // The stand-in connects to nothing and hangs up, so TLS never starts.
@@ -407,6 +509,7 @@ void main() {
   });
 
   test("fails when Tor can't reach the price source", () async {
+    torIsReady();
     final tor = await fakeTor(reply: 4); // host unreachable
     torProxy = tor.address;
     await expectLater(
@@ -437,7 +540,19 @@ void main() {
     expect(callers, 0);
   });
 
+  test("until the app's Tor is ready, the price asks nobody", () async {
+    // Listening where Tor will, but not known to be Tor yet.
+    final tor = await fakeTor();
+    torProxy = tor.address;
+    await expectLater(
+      readPrice(krakenTicker, client()),
+      throwsA(isA<SocketException>()),
+    );
+    expect(tor.asked, isEmpty);
+  });
+
   test('only https goes over Tor', () async {
+    torIsReady();
     final tor = await fakeTor();
     torProxy = tor.address;
     await expectLater(

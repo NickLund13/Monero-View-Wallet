@@ -16,13 +16,23 @@ import 'package:flutter/services.dart';
 
 /// The SOCKS proxy ("127.0.0.1:19050") the wallet reaches its node through,
 /// or null while Tor is off. The wallet sets it when it connects, and the
-/// price lookup follows it.
+/// price lookup follows it. Nothing is sent through it until the app's own
+/// Tor is [BuiltInTor.ready].
 String? torProxy;
 
 /// Where the app's Tor listens for SOCKS connections, on this device only.
 /// Not 9050 or 9150, which a Tor service or Tor Browser on the same device
 /// would already hold. Tests replace it.
+///
+/// Another program could take the port first. Tor then can't open it, and
+/// fails to start or connect instead: the app never takes whatever answers
+/// there for its Tor (see [BuiltInTor.ready]).
 String torAddress = '127.0.0.1:19050';
+
+/// How Tor is told to listen at [torAddress]: on a separate circuit for each
+/// host it connects to, so the node, Kraken and each node Test speed asks
+/// don't share an exit that could link them.
+String get _socksPort => '$torAddress IsolateDestAddr';
 
 /// The `tor` program that ships with the app, or null in a build that has
 /// none. main() sets it on Windows.
@@ -35,10 +45,12 @@ bool torInApp = false;
 /// True if this build has Tor.
 bool get hasTor => torInApp || torProgram != null;
 
-/// Where the Tor inside the app takes commands (its control port), on this
-/// device only. Only the app can use it: Tor asks for the cookie it writes in
-/// [torFolder], which no other app can read. Tests replace it.
-String torControlAddress = '127.0.0.1:19051';
+/// The file in [torFolder] where the Tor inside the app writes down where it
+/// takes commands (its control port): a free port on this device that Tor
+/// picks as it starts, so no other app can have taken it first. Only the app
+/// can use it: Tor asks for the cookie it writes next to it, and no other app
+/// can read either file.
+const torControlPortFile = 'control_port';
 
 /// Starts the Tor inside the app with these command-line arguments, on a
 /// thread of its own (ios/Runner/InAppTor.swift). Answers "started",
@@ -86,22 +98,24 @@ class TorControl {
         );
   }
 
-  /// Connects to the control port at [address] and gives Tor the cookie it
-  /// wrote to [cookie]. Tor opens the port and writes the cookie a moment
-  /// after it starts, so this keeps trying for up to [within].
+  /// Connects to the control port Tor wrote down in [port] (see
+  /// [torControlPortFile]) and gives Tor the cookie it wrote to [cookie]. Tor
+  /// writes both a moment after it starts, so this keeps trying for up to
+  /// [within].
   static Future<TorControl> open(
-    String address,
+    File port,
     File cookie, {
     Duration within = const Duration(seconds: 30),
   }) async {
-    final colon = address.lastIndexOf(':');
     final trying = Stopwatch()..start();
     while (true) {
       Socket? socket;
       try {
+        final written = _writtenPort.firstMatch(port.readAsStringSync());
+        if (written == null) throw const FileSystemException();
         socket = await Socket.connect(
-          address.substring(0, colon),
-          int.parse(address.substring(colon + 1)),
+          InternetAddress.loopbackIPv4,
+          int.parse(written[1]!),
           timeout: const Duration(seconds: 5),
         );
         final control = TorControl._(socket);
@@ -120,6 +134,12 @@ class TorControl {
       }
     }
   }
+
+  /// Tor's line in [torControlPortFile]. Only a port on this device counts.
+  static final _writtenPort = RegExp(
+    r'^PORT=127\.0\.0\.1:(\d{1,5})\r?$',
+    multiLine: true,
+  );
 
   final Socket _socket;
   final _lines = <String>[];
@@ -215,9 +235,10 @@ class BuiltInTor extends ChangeNotifier {
   Future<TorControl>? _control;
   TorControl? _live;
 
-  /// Whether the Tor inside the app has been started in this launch, and
-  /// whether it has ended since.
-  bool _inAppStarted = false;
+  /// The folder the Tor inside the app was started with in this launch (null
+  /// until then), and whether it has ended since. It runs from that folder
+  /// until the app ends.
+  String? _inAppFolder;
   bool _inAppEnded = false;
 
   /// Completes when the Tor that was stopped last has gone: until then it
@@ -234,7 +255,9 @@ class BuiltInTor extends ChangeNotifier {
   /// has.
   String? error;
 
-  /// True once connections can be made through it.
+  /// True once connections can be made through it: Tor is connected to the
+  /// Tor network and holds [torAddress]. Until then the app sends nothing
+  /// there, since anything else could be listening on it.
   bool get ready => progress == 100;
 
   /// The last lines Tor printed, for a test to show when Tor doesn't connect.
@@ -279,7 +302,8 @@ class BuiltInTor extends ChangeNotifier {
   Future<String> _launch(int run) async {
     final program = torProgram;
     final folder = torFolder;
-    if (torInApp && folder != null) return _launchInApp(run, folder);
+    final inApp = _inAppFolder ?? folder;
+    if (torInApp && inApp != null) return _launchInApp(run, inApp);
     if (program == null || folder == null || !File(program).existsSync()) {
       throw const TorException('This build has no Tor yet.');
     }
@@ -299,7 +323,9 @@ class BuiltInTor extends ChangeNotifier {
           '--ignore-missing-torrc',
           '--defaults-torrc', '$folder${Platform.pathSeparator}torrc-defaults',
           '--DataDirectory', folder,
-          '--SocksPort', torAddress,
+          // Tor exits if it can't open it, so reaching 100% below means it
+          // holds it.
+          '--SocksPort', _socksPort,
           '--ClientOnly', '1',
           '--AvoidDiskWrites', '1',
           // Read below for the progress, and kept nowhere.
@@ -358,7 +384,20 @@ class BuiltInTor extends ChangeNotifier {
       rethrow;
     }
     if (run != _runs) throw const TorException('Tor was stopped.');
-    await control.command('SETCONF DisableNetwork=0');
+    try {
+      await control.command('SETCONF DisableNetwork=0');
+    } on TorException {
+      // Tor goes back on the network only if it can open its SOCKS port.
+      if (control.closed) rethrow;
+      throw const TorException(_portTaken);
+    }
+    // And Tor's own word, over the port only it can have opened, that the
+    // SOCKS port the app connects to is the one it opened.
+    final socks = await control.command('GETINFO net/listeners/socks');
+    if (run != _runs) throw const TorException('Tor was stopped.');
+    if (!socks.any((line) => line.contains('"$torAddress"'))) {
+      throw const TorException(_portTaken);
+    }
     notices.clear();
     while (true) {
       final (percent, line) = await control.bootstrap();
@@ -377,8 +416,21 @@ class BuiltInTor extends ChangeNotifier {
     }
   }
 
+  static const _portTaken =
+      "Tor couldn't open its port. Another app may be using it.";
+
   Future<TorControl> _openInApp(String folder) async {
-    _inAppStarted = true;
+    final port = File('$folder${Platform.pathSeparator}$torControlPortFile');
+    if (_inAppFolder == null) {
+      // Written by the Tor of an earlier launch: that port may be anyone's
+      // now. This launch's Tor writes it again.
+      try {
+        port.deleteSync();
+      } on FileSystemException {
+        // There was none.
+      }
+    }
+    _inAppFolder = folder;
     final state = await runTorInApp(inAppTorArguments(folder));
     if (state == 'exited') {
       _inAppEnded = true;
@@ -387,7 +439,7 @@ class BuiltInTor extends ChangeNotifier {
       );
     }
     final control = _live = await TorControl.open(
-      torControlAddress,
+      port,
       File('$folder${Platform.pathSeparator}control_auth_cookie'),
     );
     control.done.then((_) {
@@ -408,8 +460,8 @@ class BuiltInTor extends ChangeNotifier {
   /// connection made through it. Over a new control connection if the last
   /// one ended; commands go in order, so this comes after any start's.
   void _takeOffline() {
-    final folder = torFolder;
-    if (!_inAppStarted || _inAppEnded || folder == null) return;
+    final folder = _inAppFolder;
+    if (folder == null || _inAppEnded) return;
     final opening = _control ??= _openInApp(folder);
     void cantStop() {
       error =
@@ -442,8 +494,11 @@ List<String> inAppTorArguments(String folder) => [
   '--ignore-missing-torrc',
   '--defaults-torrc', '$folder${Platform.pathSeparator}torrc-defaults',
   '--DataDirectory', folder,
-  '--SocksPort', torAddress,
-  '--ControlPort', torControlAddress,
+  '--SocksPort', _socksPort,
+  // A free port Tor picks, written down for the app: see torControlPortFile.
+  '--ControlPort', 'auto',
+  '--ControlPortWriteToFile',
+  '$folder${Platform.pathSeparator}$torControlPortFile',
   '--CookieAuthentication', '1',
   '--ClientOnly', '1',
   '--AvoidDiskWrites', '1',
@@ -538,13 +593,17 @@ Future<Socket> socksConnect(String proxy, String host, int port) async {
 
 /// For [HttpClient.connectionFactory]: makes every connection through the Tor
 /// at [proxy], then starts TLS with the certificate checked against the
-/// host's name. There is no direct connection to fall back to, so if Tor is
-/// not running the request fails. Only https goes through.
+/// host's name. There is no direct connection to fall back to, so if the
+/// app's own Tor isn't [BuiltInTor.ready] the request fails without
+/// connecting anywhere. Only https goes through.
 Future<ConnectionTask<Socket>> Function(Uri, String?, int?) throughTor(
   String proxy,
 ) => (url, _, _) async {
   if (!url.isScheme('https')) {
     throw ArgumentError.value(url.scheme, 'url', 'only https goes over Tor');
+  }
+  if (!builtInTor.ready) {
+    throw const SocketException("Tor isn't connected yet.");
   }
   Socket? socket;
   var cancelled = false;

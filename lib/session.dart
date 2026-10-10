@@ -109,6 +109,10 @@ class WalletSession extends ChangeNotifier {
 
   final ViewWallet wallet;
   Timer? _poll;
+
+  /// The app's Tor as it was when polling started, whose changes the wallet
+  /// follows (see [ViewWallet.followTor]).
+  BuiltInTor? _tor;
   bool _refreshing = false;
   int _polls = 0;
   bool _closed = false;
@@ -235,6 +239,8 @@ class WalletSession extends ChangeNotifier {
 
   void startPolling() {
     _poll ??= Timer.periodic(const Duration(seconds: 2), (_) => refresh());
+    // At once, so the wallet stops asking the node the moment Tor stops.
+    _tor ??= builtInTor..addListener(wallet.followTor);
     refresh();
   }
 
@@ -244,6 +250,7 @@ class WalletSession extends ChangeNotifier {
     // Starts the app's Tor at launch, and again if it ever stops. A start
     // that fails is tried again every eighth poll, not at each one.
     if (tor != null && _polls++ % 8 == 0) builtInTor.start().ignore();
+    wallet.followTor();
     try {
       final tip = await wallet.nodeHeight();
       // Don't read the wallet while an import or a rescan is changing it.
@@ -378,6 +385,7 @@ class WalletSession extends ChangeNotifier {
   Future<void> forget() {
     _closed = true;
     _poll?.cancel();
+    _tor?.removeListener(wallet.followTor);
     return wallet.forget();
   }
 
@@ -385,6 +393,7 @@ class WalletSession extends ChangeNotifier {
   void dispose() {
     _closed = true;
     _poll?.cancel();
+    _tor?.removeListener(wallet.followTor);
     wallet.close();
     super.dispose();
   }

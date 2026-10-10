@@ -102,10 +102,17 @@ show how Tor recovers when the app comes back.
 - While Tor is starting, or if it can't start or connect, the node and Kraken
   can't be reached. The app never falls back to a direct connection.
 - The choice is saved with the node, inside the encrypted wallet file.
-- Tor listens for the app on port 19050 of this computer only. Other programs
-  on the computer could use that port too while the app runs. On iPhone it
-  also takes commands on port 19051, only from someone who shows the cookie
-  Tor writes into its folder, which no other app can read.
+- Tor listens for the app on port 19050 of this computer only, and gives each
+  host (the node, Kraken, each node Test speed asks) a circuit of its own.
+  Other programs on the computer could use that port too while the app runs.
+  The app sends nothing there until its own Tor has connected and holds the
+  port, so a program that took the port first gets nothing, and Tor fails to
+  start instead. On iPhone Tor also takes commands on a free port it picks
+  and writes down in its folder, only from someone who shows the cookie Tor
+  writes next to it. No other app can read either file.
+- With Tor on, Choose a node lists the onion nodes first. With any other node
+  the last Tor relay sits between the app and the node and, as the app can't
+  check most nodes' certificates, could read and change the traffic.
 - Your internet provider can see that this computer uses Tor, though not what
   for. The app has no bridges, so it won't connect where Tor is blocked.
 - What Tor does not change: a public node still learns which key images belong
