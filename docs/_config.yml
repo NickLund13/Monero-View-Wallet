@@ -1,7 +1,8 @@
 # GitHub Pages builds a small site from this folder (Settings → Pages: deploy
 # from the main branch, /docs): the home page, index.md, and the privacy
 # policy, which App Store Connect links to. The rest of docs/ is for
-# development and stays out of the site.
+# development and stays out of the site. _layouts/default.html replaces the
+# theme's page layout so the pages load nothing from other sites.
 title: Monero View
 description: A view-only Monero wallet for iPhone.
 exclude:

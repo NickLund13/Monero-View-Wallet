@@ -58,6 +58,25 @@ void main() {
     }
   });
 
+  test('the web page of the policy loads nothing from other sites', () {
+    // GitHub Pages builds docs/ with its default theme, whose own layout
+    // loads a script from a CDN; docs/_layouts/default.html replaces it.
+    final layout = File('docs/_layouts/default.html').readAsStringSync();
+    expect(layout, isNot(contains('<script')));
+    expect(layout, isNot(contains('<iframe')));
+    expect(layout, isNot(contains(RegExp(r'(src|href)="(https?:)?//'))));
+    expect(layout, isNot(contains(RegExp(r'\{%-?\s*include'))));
+    final config = File('docs/_config.yml').readAsStringSync();
+    expect(
+      config,
+      isNot(
+        contains(
+          RegExp(r'^\s*(remote_theme|google_analytics)', multiLine: true),
+        ),
+      ),
+    );
+  });
+
   testWidgets('Setup and the Settings row open the policy', (tester) async {
     await tester.pumpWidget(const MainApp());
     await tester.scrollUntilVisible(
