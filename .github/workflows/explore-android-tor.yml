@@ -1,0 +1,64 @@
+# Temporary: looks up the Tor Project's Android builds of tor (their file
+# names, signatures, checksums and what is in them) on a GitHub runner, which
+# can reach the Tor Project's archive. Removed again before the pull request
+# is ready.
+name: Explore Android Tor (temporary)
+
+on:
+  push:
+    branches: [claude/android-camera-tor-dsd9qz]
+    paths: [.github/workflows/explore-android-tor.yml]
+
+permissions:
+  contents: read
+
+jobs:
+  explore:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Look at the Android expert bundles
+        run: |
+          set -eux
+          V=15.0.24
+          BASE=https://archive.torproject.org/tor-package-archive/torbrowser/$V
+          curl -fsSL "$BASE/" | grep -o 'tor-expert-bundle-[^"<]*' | sort -u
+          FPR=EF6E286DDA85EA2A4BA7DE684E2C6E8793298290
+          curl -fsSL "https://keys.openpgp.org/vks/v1/by-fingerprint/$FPR" | gpg --import
+          gpg --fingerprint "$FPR"
+          for arch in aarch64 armv7 x86_64 x86; do
+            f=tor-expert-bundle-android-$arch-$V.tar.gz
+            curl -fsSLO "$BASE/$f" || continue
+            curl -fsSLO "$BASE/$f.asc"
+            gpg --status-fd 1 --verify "$f.asc" "$f" 2>&1 | grep -E 'VALIDSIG|GOODSIG|BADSIG|ERRSIG' || true
+            sha256sum "$f"
+            tar -tvzf "$f"
+            mkdir -p "x/$arch"
+            tar -xzf "$f" -C "x/$arch"
+            find "x/$arch" -type f -exec sha256sum {} \;
+            for so in $(find "x/$arch" -type f -name '*.so*'); do
+              file "$so"
+              readelf -hW "$so" | grep -E 'Type|Machine'
+              readelf -lW "$so" | grep -E 'LOAD|INTERP|GNU_STACK' || true
+              readelf -dW "$so" | grep -E 'NEEDED|SONAME|RUNPATH|RPATH|FLAGS' || true
+              strings -n 8 "$so" | grep -E 'This build of Tor|^0\.4\.[0-9]+\.[0-9]+|OpenSSL [0-9]|libevent|zstd|lzma' | sort -u | head -20 || true
+            done
+          done
+          for d in $(find x -type d -name docs); do
+            echo "== $d"; ls -la "$d"
+            for f in $(find "$d" -type f); do
+              echo "--- $f"; sha256sum "$f"
+              n=$(basename "$f")
+              case "$n" in
+                *tor*) cmp "$f" assets/licenses/tor.txt && echo SAME-AS-tor.txt || true ;;
+                *openssl*|*OpenSSL*) cmp "$f" assets/licenses/openssl.txt && echo SAME-AS-openssl.txt || true ;;
+                *libevent*) cmp "$f" assets/licenses/libevent.txt && echo SAME-AS-libevent.txt || true ;;
+                *zlib*) cmp "$f" assets/licenses/zlib.txt && echo SAME-AS-zlib.txt || true ;;
+              esac
+            done
+          done
+          for f in $(find x/x86_64 -path '*docs*' -type f); do
+            echo "===== $f"; cat "$f" | head -c 4000; echo
+          done
