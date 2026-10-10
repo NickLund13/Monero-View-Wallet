@@ -9,13 +9,32 @@ useDefault = true
 [[rules]]
 id = "monero-private-key"
 description = "64 hex characters next to a view/spend/secret/seed keyword: possible Monero private key"
-regex = '''(?i)(?:view|spend|secret|private|priv|seed)[\w \t"'=:.()\[\]-]{0,40}?\b([0-9a-f]{64})\b'''
+regex = '''(?i)(?:view|spend|secret|private|priv|seed)[\w\s"'=:.,()\[\]{}<>$-]{0,40}?\b([0-9a-f]{64})\b'''
 entropy = 3
 keywords = ["view", "spend", "secret", "priv", "seed"]
 
-# ponytail: naive heuristic, English lowercase only. 24-25 words of 4+ letters
-# (legacy seed) or 16 words of 3-8 letters (polyseed) on one line.
+# A private key needs no keyword next to it to leak. Checksums are let through
+# by "SHA-256" on their line, and the font files' table by the file names.
+[[rules]]
+id = "monero-hex-64"
+description = "64 random-looking hex characters: possible Monero private key or key image"
+regex = '''(?:^|[^0-9a-fA-F])([0-9a-fA-F]{64})(?:[^0-9a-fA-F]|$)'''
+entropy = 3.5
+[[rules.allowlists]]
+regexTarget = "line"
+regexes = ['''(?i)sha-?256|\.(?:ttf|zip)\b''']
+
+# ponytail: naive heuristic, English lowercase only. 24-25 words of 3+ letters
+# (legacy seed) or 16 words of 3-8 letters (polyseed), one after another on a
+# line or in a quoted, comma-separated list.
 [[rules]]
 id = "monero-seed-phrase"
 description = "A long run of lowercase dictionary-style words: possible mnemonic seed"
-regex = '''\b(?:[a-z]{4,}[ \t]+){23,24}[a-z]{4,}\b|\b(?:[a-z]{3,8}[ \t]+){15}[a-z]{3,8}\b'''
+regex = '''\b(?:[a-z]{3,}["',]*[ \t]+["']?){23,24}[a-z]{3,}\b|\b(?:[a-z]{3,8}[ \t]+){15}[a-z]{3,8}\b'''
+
+# A dozen or more words given to a seed or mnemonic, whatever the separator.
+[[rules]]
+id = "monero-seed-assignment"
+description = "12 or more words assigned to a seed or mnemonic: possible mnemonic seed"
+regex = '''(?i)(?:seed|mnemonic)\w*["']?\s*[:=]\s*[\[(]?\s*["'`]((?:[a-z]+["',\s]+){11,}[a-z]+)'''
+keywords = ["seed", "mnemonic"]

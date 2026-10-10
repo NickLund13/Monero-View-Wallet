@@ -1,23 +1,64 @@
 #!/bin/sh
 # Blocks wallet files and secrets from being committed. See SECURITY.md.
 # Enable once per clone:  git config core.hooksPath .githooks
-# CI runs this same script (it scans full history there instead of the staged diff).
+# CI runs this same script. There it scans full history for secrets instead of
+# the staged diff, and checks each commit a pull request brings for wallet
+# files: GitHub keeps every one, even after a later commit deletes the file.
 set -eu
 
 fail=0
 
-ignored=$(git ls-files --cached --ignored --exclude-standard)
+# wallet2's export and transaction files, by their header whatever they are
+# named: key images, outputs, unsigned and signed transactions, multisig.
+headers='^Monero (key image|output) export|^Monero (unsigned|signed) tx set|^Monero multisig (unsigned tx set|export)'
+
+commits=""
+if [ -n "${CI:-}" ]; then
+  if git rev-parse -q --verify origin/main >/dev/null; then
+    commits=$(git rev-list HEAD ^origin/main)
+  else
+    commits=$(git rev-list HEAD)
+  fi
+fi
+
+ignored=$(
+  git ls-files --cached --ignored --exclude-standard
+  for commit in $commits; do
+    git ls-tree -r -z --name-only "$commit" |
+      git check-ignore --no-index --stdin -z | tr '\0' '\n' |
+      sed "s|^|$commit: |"
+  done
+)
 if [ -n "$ignored" ]; then
   echo "BLOCKED: files matching .gitignore (wallet files, keys, .env) are staged or tracked:" >&2
   echo "$ignored" >&2
   fail=1
 fi
 
-exports=$(git grep --cached -alE '^Monero (key image|output) export' || true)
+exports=$(
+  git grep --cached -alE "$headers" || true
+  for commit in $commits; do
+    git grep -alE "$headers" "$commit" || true
+  done
+)
 if [ -n "$exports" ]; then
-  echo "BLOCKED: Monero wallet export files are staged or tracked:" >&2
+  echo "BLOCKED: Monero wallet export or transaction files are staged or tracked:" >&2
   echo "$exports" >&2
   fail=1
+fi
+
+# A wallet's cache file has no extension of its own: it is the file next to
+# its .keys file, which .gitignore keeps out.
+if [ -z "${CI:-}" ]; then
+  caches=$(git diff --cached --name-only --diff-filter=AR |
+    while IFS= read -r path; do
+      if [ -e "$path.keys" ]; then echo "$path"; fi
+    done)
+  if [ -n "$caches" ]; then
+    echo "BLOCKED: wallet files (each has a .keys file next to it) are staged:" >&2
+    echo "$caches" >&2
+    fail=1
+  fi
 fi
 
 if ! command -v gitleaks >/dev/null 2>&1; then

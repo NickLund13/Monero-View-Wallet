@@ -56,7 +56,7 @@ The node sees:
 
 The node never gets your view key, your address, your balance or your labels.
 
-The connection to the node is encrypted when the node offers it, as the public nodes in the app's list do. But the app doesn't check the node's certificate, because most nodes make their own, so someone who can get in between could read what the app asks the node, encrypted or not: for instance whoever runs your Wi-Fi or, with Tor on, the last Tor relay before a node that isn't an onion node. An onion node, which Tor encrypts the whole way, or your own node on your own network avoids that.
+The connection to the node is encrypted when the node offers it, as the public nodes in the app's list do. But the app doesn't check the node's certificate, because most nodes make their own, so someone who can get in between could read what the app asks the node, encrypted or not, and change what the node answers, which could make the app show a wrong balance or history: for instance whoever runs your Wi-Fi or, with Tor on, the last Tor relay before a node that isn't an onion node. An onion node, which Tor encrypts the whole way, or your own node on your own network avoids that.
 
 The public nodes in the app's list are run by the people or projects it names, not by the developer. What a node logs is up to whoever runs it.
 
@@ -76,6 +76,8 @@ Connect over Tor is off by default, and always on for an onion node. With it on,
 
 Copy puts an address or transaction ID on the iPhone's clipboard, and Share hands an address to the app you pick in the share sheet. From there it is out of this app's hands.
 
+If you paste the address or the secret view key at setup, the app empties the clipboard once the wallet is set up, or once it has cleared a field that held something that doesn't belong there, such as a seed.
+
 ## What the developer receives
 
 Nothing. The app contains no code from anyone that collects data: no analytics, crash reporting, advertising or tracking. The developer has no data about you, so shares none with anyone.
@@ -84,7 +86,7 @@ Apple runs the App Store, Face ID, the Keychain, the share sheet and iCloud unde
 
 ## Deleting your data
 
-- **Remove wallet from this device,** in Settings, deletes the wallet's password and then its files, and turns Show USD value off. It leaves the Appearance choice, Tor's files and the ring database.
+- **Remove wallet from this device,** in Settings, deletes the wallet's password and then its files, empties the ring database, and turns Show USD value off. It leaves the Appearance choice and Tor's files.
 - **Deleting the app** deletes everything it kept in its storage. iOS keeps Keychain items after an app is deleted, so the wallet's password stays in the Keychain, opening nothing, until the app is installed and set up again, which replaces it.
 - **The optional connections:** the price requests stop when you turn Show USD value off, and with Settings → "Test speed asks every node" off, Test speed asks only the node you picked. Using your own node keeps your key images to yourself.
 - **The developer** holds no data about you, so there is nothing to ask the developer to delete.

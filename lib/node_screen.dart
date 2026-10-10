@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import 'secret_guard.dart';
 import 'tor.dart';
 import 'ui.dart';
 import 'wallet.dart';
@@ -43,11 +44,18 @@ bool isPublicNode(Network network, String node, List<String> added) =>
 
 final _hostAndPort = RegExp(r'^([A-Za-z0-9.-]+):(\d{1,5})$');
 
-/// Null if [input] is a node this build can use, otherwise why not.
+/// Null if [input] is a node this build can use, otherwise why not. A name
+/// ending in a dot is refused: "x.onion." is an onion address that [isOnion]
+/// would have to know to send over Tor, and nothing needs the dot.
 String? nodeProblem(String input) {
   final match = _hostAndPort.firstMatch(input);
+  final host = match?[1] ?? '';
   final port = match == null ? 0 : int.parse(match[2]!);
-  if (port < 1 || port > 65535) {
+  if (port < 1 ||
+      port > 65535 ||
+      host.startsWith('.') ||
+      host.endsWith('.') ||
+      host.contains('..')) {
     return 'Enter the node as host:port, for example 192.168.1.20:18081.';
   }
   return null;
@@ -194,6 +202,18 @@ class _NodeScreenState extends State<NodeScreen> {
       _public ?? (nodeProblem(_ownNode) == null ? _ownNode : null);
 
   String get _addingNode => _adding.text.trim();
+
+  /// Keeps a seed phrase or a private key pasted into a node field out of it.
+  late final _refuseSecrets = RefuseSecrets(
+    () => ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text(
+          'That looks like a seed phrase or a private key, so it was left '
+          'out. $neverEnterSeed',
+        ),
+      ),
+    ),
+  );
 
   Future<void> _runTest() async {
     final node = _ownNode;
@@ -369,6 +389,7 @@ class _NodeScreenState extends State<NodeScreen> {
                 TextField(
                   key: const Key('ownNode'),
                   controller: _own,
+                  inputFormatters: [_refuseSecrets],
                   onTap: () => setState(() => _public = null),
                   onChanged: (_) => setState(() {
                     _public = null;
@@ -458,6 +479,7 @@ class _NodeScreenState extends State<NodeScreen> {
                   TextField(
                     key: const Key('addNode'),
                     controller: _adding,
+                    inputFormatters: [_refuseSecrets],
                     autofocus: true,
                     onChanged: (_) => setState(() {}),
                     onSubmitted: (_) => _addNode(),

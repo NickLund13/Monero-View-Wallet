@@ -6,6 +6,7 @@ import 'node_screen.dart';
 import 'pick_file.dart';
 import 'price.dart';
 import 'receive_screen.dart';
+import 'secret_guard.dart';
 import 'session.dart';
 import 'settings_screen.dart';
 import 'setup_screen.dart';
@@ -673,6 +674,9 @@ class _NameDialog extends StatefulWidget {
 class _NameDialogState extends State<_NameDialog> {
   late final _name = TextEditingController(text: widget.name);
 
+  /// A seed phrase or a private key was just pasted in, and refused.
+  bool _refused = false;
+
   @override
   void dispose() {
     _name.dispose();
@@ -692,9 +696,26 @@ class _NameDialogState extends State<_NameDialog> {
           controller: _name,
           autofocus: true,
           maxLength: 30,
+          // Before maxLength, so a pasted seed isn't cut to fit and kept.
+          inputFormatters: [
+            RefuseSecrets(() => setState(() => _refused = true)),
+          ],
+          onChanged: (_) {
+            if (_refused) setState(() => _refused = false);
+          },
           textCapitalization: TextCapitalization.sentences,
-          // Keeps the keyboard from learning the name (Android).
+          // Keeps the keyboard from learning the name: no autocorrection or
+          // suggestions on iPhone, no personalized learning on Android.
+          autocorrect: false,
+          enableSuggestions: false,
           enableIMEPersonalizedLearning: false,
+          decoration: InputDecoration(
+            errorText: _refused
+                ? 'That looks like a seed phrase or a private key, so it was '
+                      'left out. $neverEnterSeed'
+                : null,
+            errorMaxLines: 4,
+          ),
           onSubmitted: (name) => Navigator.pop(context, name),
         ),
         Text(

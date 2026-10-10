@@ -2,10 +2,12 @@
 # pre-commit hook and CI fail if one is force-added. See SECURITY.md.
 # Key image exports are caught by their file header, not by name.
 
-# Monero wallet files
+# Monero wallet files, and the logs and ring database wallet2 writes
 *.keys
 *.keys.*
 *.address.txt
+.shared-ringdb/
+*.log
 
 # Credentials and signing material
 .env
@@ -15,6 +17,8 @@
 *.p8
 *.p12
 *.mobileprovision
+*.jks
+*.keystore
 
 # OS noise
 .DS_Store

@@ -9,7 +9,9 @@
 /// a password the Keychain only gives out while the iPhone is unlocked.
 ///
 /// The Runner also covers the app whenever it isn't active, so the app
-/// switcher's snapshot of it is blank, locked or not.
+/// switcher's snapshot of it is blank, locked or not. The cover stays on when
+/// the app is back in front until the app has drawn itself as it is now, so
+/// the balance from before it went away never shows, not even for a frame.
 library;
 
 import 'dart:async';
@@ -124,6 +126,12 @@ class AppLock extends ChangeNotifier {
   /// The time now. A test can move it on.
   DateTime Function() now = DateTime.now;
 
+  /// Takes the Runner's cover off the app (ios/Runner/AppDelegate.swift). A
+  /// test puts a stand-in here.
+  Future<void> Function() uncover = Platform.isIOS
+      ? () => IosOwnerCheck._channel.invokeMethod<void>('uncover')
+      : () async {};
+
   /// What the device unlocks with, as of the last check.
   Unlock kind = Unlock.none;
 
@@ -194,8 +202,22 @@ class AppLock extends ChangeNotifier {
           // A clock set back while the app was away counts as a long time.
           if (gone.isNegative || gone >= lockAfter) _lock();
         }
-        if (state == AppLifecycleState.resumed) askIfDue();
+        if (state == AppLifecycleState.resumed) {
+          askIfDue();
+          _uncoverWhenDrawn();
+        }
     }
+  }
+
+  /// Takes the cover off once the app has drawn itself as it is now, the lock
+  /// screen if it just locked: after two frames, so the first is on the
+  /// screen.
+  void _uncoverWhenDrawn() {
+    final binding = WidgetsBinding.instance;
+    binding.endOfFrame
+        .then((_) => binding.endOfFrame)
+        .then((_) => uncover())
+        .ignore();
   }
 
   /// Starts the check once each time the lock screen comes up, so it takes no

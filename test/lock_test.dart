@@ -125,6 +125,32 @@ void main() {
     expect(locked(), isTrue);
   });
 
+  testWidgets('takes the cover off only once the lock screen is drawn', (
+    tester,
+  ) async {
+    final uncovered = <bool>[];
+    appLock.uncover = () async => uncovered.add(locked());
+    check.answers.add(CheckResult.ok);
+    await appLock.start(on: true);
+    await showApp(tester);
+    expect(locked(), isFalse);
+
+    change(tester, goAway);
+    clock = clock.add(lockAfter);
+    change(tester, [...comeBack, AppLifecycleState.resumed]);
+    expect(uncovered, isEmpty, reason: 'nothing drawn yet');
+    await tester.pump();
+    expect(uncovered, isEmpty, reason: 'the frame may not be on screen yet');
+    await tester.pump();
+    expect(uncovered, [true], reason: 'the lock screen, never the balance');
+
+    // Face ID's own sheet: the cover comes off again after it.
+    change(tester, [AppLifecycleState.inactive, AppLifecycleState.resumed]);
+    await tester.pump();
+    await tester.pump();
+    expect(uncovered, [true, true]);
+  });
+
   testWidgets('says what to do when Face ID fails, and offers the passcode', (
     tester,
   ) async {

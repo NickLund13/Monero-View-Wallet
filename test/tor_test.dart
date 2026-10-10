@@ -126,6 +126,8 @@ void main() {
     expect(isOnion('$onion:18081'), isTrue);
     expect(isOnion('${onion.toUpperCase()}:18081'), isTrue);
     expect(isOnion(onion), isTrue);
+    expect(isOnion('$onion.:18081'), isTrue, reason: "the root's dot");
+    expect(isOnion('$onion.'), isTrue);
     expect(isOnion('node.example.org:18081'), isFalse);
     expect(isOnion('onion.example.org:18081'), isFalse);
     expect(isOnion('192.168.1.20:18081'), isFalse);

@@ -41,14 +41,19 @@ for every change; read them before writing code:
   the PR was not reviewed.
 - While GitHub Actions cannot start jobs (the checks then fail within seconds
   with no runner), a PR may merge on the same checks run in a cloud session
-  instead (the owner's decision of 2026-10-10). Merge main into the PR branch, then on its head commit:
+  instead (the owner's decision of 2026-10-10), but never a PR from a fork:
+  its code would run in a session that holds the owner's GitHub access.
+  Merge main into the PR branch, then on its head commit:
   `sh tool/cloud_checks.sh` passes (secret and wallet file scan, dependency
   scan, `flutter analyze` and the offline tests, with the CI's pinned tools),
   and its summary is posted on the PR as a comment. The review comes from a
   separate Claude session: never the session that wrote the change, nor a
   subagent it started. The session that wrote the change asks for the review
-  once the PR is ready. The reviewer follows the prompt in `.github/workflows/claude-review.yml` and
-  posts the `Claude review of <commit>` comment ending in `Verdict: PASS`.
+  once the PR is ready. The reviewer follows the prompt in
+  `.github/workflows/claude-review.yml`, reads the PR's description and only
+  the comments that workflow gathers (the owner's, members', collaborators'
+  and earlier reviews), and posts the `Claude review of <commit>` comment
+  ending in `Verdict: PASS`.
   That comment is posted from the owner's account, so unlike the review job
   nothing proves which session wrote it: the session that wrote the change
   and its subagents never post it. The repository is public, so such a
