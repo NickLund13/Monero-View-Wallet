@@ -1,0 +1,54 @@
+# Shared by the workflows that run the app's tests and the iOS build, so the
+# Flutter version, its checksums and the package and library steps are pinned
+# in one place. Run it after actions/checkout. On a Mac runner the library step
+# packs monero_c for iOS (see tool/fetch_monero_c.sh).
+
+name: Set up Flutter and the wallet library
+description: Installs the pinned Flutter SDK, gets packages exactly as pubspec.lock pins them and fetches monero_c and Tor, each checksum verified.
+
+runs:
+  using: composite
+  steps:
+    # The same Flutter version as the PC builds (README.md), for Linux and for
+    # Apple silicon Macs. The checksums are the ones Flutter publishes in its
+    # releases_linux.json and releases_macos.json.
+    - name: Install Flutter (pinned, checksum verified)
+      shell: bash
+      env:
+        VERSION: 3.47.6
+        LINUX_SHA256: f1631b9c2c8b3529323db412b0d1beacf4a748f8783b0d7cf599a8fd5f461675
+        MACOS_ARM64_SHA256: a1946d3b6b3de15ce247dc89649df9035ce29e6b4e7ebe91919a25890ea2e79a
+      run: |
+        case "$RUNNER_OS-$RUNNER_ARCH" in
+          Linux-X64) archive=linux/flutter_linux_${VERSION}-stable.tar.xz sha=$LINUX_SHA256 ;;
+          macOS-ARM64) archive=macos/flutter_macos_arm64_${VERSION}-stable.zip sha=$MACOS_ARM64_SHA256 ;;
+          *) echo "::error::No pinned Flutter for $RUNNER_OS-$RUNNER_ARCH."; exit 1 ;;
+        esac
+        file="$RUNNER_TEMP/$(basename "$archive")"
+        curl -fsSLo "$file" "https://storage.googleapis.com/flutter_infra_release/releases/stable/$archive"
+        echo "$sha  $file" | shasum -a 256 -c -
+        case "$file" in
+          *.zip) unzip -q "$file" -d "$RUNNER_TEMP" ;;
+          *) tar -xJf "$file" -C "$RUNNER_TEMP" ;;
+        esac
+        rm "$file"
+        echo "$RUNNER_TEMP/flutter/bin" >> "$GITHUB_PATH"
+    - name: Turn off Flutter and Dart usage reporting
+      shell: bash
+      run: |
+        flutter config --no-analytics
+        dart --disable-analytics
+    # Fails if pubspec.lock is out of date or a package's content hash
+    # differs from the one it records.
+    - name: Get packages exactly as pubspec.lock pins them
+      shell: bash
+      run: flutter pub get --enforce-lockfile
+    - name: Fetch the wallet library (pinned, checksum verified)
+      shell: bash
+      run: sh tool/fetch_monero_c.sh
+    # The Tor Project's tor: on Linux the tor program, for the tests of the
+    # app's built-in Tor; on a Mac runner Tor.framework's tor.xcframework,
+    # which the iPhone build links into the app.
+    - name: Fetch Tor (pinned, checksum verified)
+      shell: bash
+      run: sh tool/fetch_tor.sh

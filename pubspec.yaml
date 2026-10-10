@@ -1,0 +1,55 @@
+name: monero_view_wallet
+description: "View-only Monero wallet"
+publish_to: 'none'
+version: 0.1.0+1
+
+environment:
+  sdk: ^3.13.5
+
+dependencies:
+  flutter:
+    sdk: flutter
+  # Dart bindings for monero_c, pinned to the v0.18.4.6-RC2 commit. Keep in step
+  # with the native library version in tool/fetch_monero_c.sh.
+  monero:
+    git:
+      url: https://github.com/MrCyjaneK/monero_c
+      ref: 3bfb3856a838f2bf6b729501837bb0295dedf25d
+      path: impls/monero.dart
+  # The Dart team's FFI helpers (memory allocation, UTF-16 strings), for the
+  # Windows file dialog in lib/pick_file.dart. The monero bindings already use
+  # this exact version, so it adds no new code to the app.
+  ffi: 2.2.0
+  # QR code encoder for the Receive screen, so codes are made on the device:
+  # pure Dart, published by kevmoo.com, the encoder the qr_flutter widget is
+  # built on. Its only dependency is meta, which Flutter already ships.
+  # lib/receive_screen.dart draws the modules itself.
+  qr: 4.0.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: 6.0.0
+
+flutter:
+  uses-material-design: true
+  # The license texts the app shows under Settings → Open-source licenses
+  # (lib/licenses.dart), for the code and fonts bundled with it that Flutter's
+  # own list doesn't cover.
+  assets:
+    - assets/licenses/
+  # The design's typefaces, bundled so they are never fetched. From IBM's own
+  # releases, checksums and license in assets/fonts/README.md.
+  fonts:
+    - family: IBM Plex Sans
+      fonts:
+        - asset: assets/fonts/IBMPlexSans-Regular.ttf
+        - asset: assets/fonts/IBMPlexSans-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/IBMPlexSans-SemiBold.ttf
+          weight: 600
+    - family: IBM Plex Mono
+      fonts:
+        - asset: assets/fonts/IBMPlexMono-Regular.ttf
+        - asset: assets/fonts/IBMPlexMono-Medium.ttf
+          weight: 500

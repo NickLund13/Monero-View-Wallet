@@ -1,0 +1,5 @@
+#include "Generated.xcconfig"
+
+// monero_c's iOS simulator library is built for Apple silicon only, so
+// simulator builds leave out Intel (x86_64) as well as Flutter's i386.
+EXCLUDED_ARCHS[sdk=iphonesimulator*] = i386 x86_64

@@ -1,0 +1,195 @@
+# Builds the app for iPhone on a Mac runner, without signing, to show that the
+# iOS project, the Dart code and the monero_c wallet library build together,
+# with the app icon and Apple's privacy manifests in place.
+# Then it runs a smoke test on the iOS simulator: tool/ios_smoke.dart calls the
+# wallet library with obviously fake input, saves a throwaway wallet with its
+# password in the Keychain, opens it again and removes it, checks that the
+# app's native code for key images files answers and deletes leftover copies
+# at launch, asks the lock's Face ID and passcode checks, starts the Tor inside
+# the app (kept off the network) and asks it its version, and opens the app's
+# first screen. Then the workflow enrolls a face in the simulator, which the
+# lock must offer, sends the app to the background and checks that the app
+# switcher's snapshot of it is blank (tool/snapshot_colors.swift).
+#
+# Mac minutes are scarce: the repository is private, so every Mac minute uses
+# 10 of the free Actions minutes that all the other checks share. So this is
+# not a pull request check. It runs by hand (Actions > iOS build > Run
+# workflow, on any branch). It used to run by itself too, after a push to main
+# that changes the iOS project or the wallet library and on pull requests that
+# change this workflow; those runs are paused while the free minutes are short
+# (see the if: on the job below).
+#
+# Signing and TestFlight come later, once the Apple developer account exists:
+# see the note at the end.
+
+name: iOS build
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - ios/**
+      - pubspec.yaml
+      - pubspec.lock
+      - tool/fetch_monero_c.sh
+      - tool/fetch_tor.sh
+      - tool/check_privacy_manifests.sh
+      - tool/ios_smoke.dart
+      - tool/snapshot_colors.swift
+      - .github/actions/flutter-setup/**
+      - .github/workflows/ios-build.yml
+  pull_request:
+    paths:
+      - .github/workflows/ios-build.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  # Per event too, so an automatic run, which skips its job, never cancels a
+  # run started by hand.
+  group: ios-build-${{ github.ref }}-${{ github.event_name }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: iPhone build and simulator smoke test
+    # Paused 2026-10-10: these Mac runs used most of the free Actions minutes,
+    # so only a run started by hand builds. Delete this line to bring back the
+    # runs after a push to main and on pull requests that change this file.
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: macos-26 # Apple silicon, so the simulator runs the arm64 library
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Show the Xcode version
+        run: xcodebuild -version
+      # On a Mac this also packs monero_c as ios/MoneroWallet.xcframework and
+      # fetches Tor.framework's tor.xcframework.
+      - uses: ./.github/actions/flutter-setup
+
+      - name: Build for iPhone (release, unsigned)
+        run: flutter build ipa --release --no-codesign
+      - name: Check the wallet library is in the app
+        run: |
+          app=build/ios/archive/Runner.xcarchive/Products/Applications/Runner.app
+          lipo -info "$app/Frameworks/MoneroWallet.framework/MoneroWallet"
+          otool -L "$app/Runner" | grep -F @rpath/MoneroWallet.framework/MoneroWallet
+      - name: Check Tor is linked into the app
+        run: |
+          app=build/ios/archive/Runner.xcarchive/Products/Applications/Runner.app
+          # tor 0.4.9.13's version string, which only Tor puts in the app.
+          if ! strings -a "$app/Runner" | grep -x '0.4.9.13' > /dev/null; then
+            echo "::error::Tor 0.4.9.13 isn't in the app."
+            exit 1
+          fi
+      - name: Check the app icon is in the app
+        run: |
+          app=build/ios/archive/Runner.xcarchive/Products/Applications/Runner.app
+          icon=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIcons:CFBundlePrimaryIcon:CFBundleIconName' "$app/Info.plist")
+          if [ "$icon" != AppIcon ]; then
+            echo "::error::The app icon isn't in the app."
+            exit 1
+          fi
+      # Every API Apple asks a reason for, in the app and each framework, must
+      # be declared in that bundle's privacy manifest, or App Store Connect
+      # refuses the upload.
+      - name: Check the privacy manifests
+        run: sh tool/check_privacy_manifests.sh build/ios/archive/Runner.xcarchive/Products/Applications/Runner.app
+
+      - name: Build for the iOS simulator (smoke test)
+        run: flutter build ios --simulator --debug -t tool/ios_smoke.dart
+      - name: Run the smoke test on the iOS simulator
+        run: |
+          app=build/ios/iphonesimulator/Runner.app
+          bundle=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$app/Info.plist")
+          udid=$(xcrun simctl list devices available --json |
+            jq -r '[.devices | to_entries[] | select(.key | contains(".iOS-")) | .value[] | select(.name | startswith("iPhone"))] | first | .udid // empty')
+          if [ -z "$udid" ]; then
+            echo "::error::No iPhone simulator on this runner."
+            exit 1
+          fi
+          xcrun simctl bootstatus "$udid" -b
+          xcrun simctl install "$udid" "$app"
+          data=$(xcrun simctl get_app_container "$udid" "$bundle" data)
+          # Made-up files where the app keeps a key images file it was handed,
+          # and where iOS leaves those files for the app, as if an earlier
+          # launch had left them behind. The app must delete them as it starts.
+          leftovers="tmp/KeyImages/earlier/key_images Documents/Inbox/key_images tmp/$bundle-Inbox/key_images"
+          for file in $leftovers; do
+            mkdir -p "$data/$(dirname "$file")"
+            echo 'made up, not key images' > "$data/$file"
+          done
+          xcrun simctl launch "$udid" "$bundle"
+          # Waits up to 3 minutes for the smoke test to write $1.
+          wait_for() {
+            for _ in $(seq 90); do
+              result=$(find "$data" -name ios_smoke.txt -exec cat {} \; 2>/dev/null || true)
+              case "$result" in *"$1"*) return ;; esac
+              sleep 2
+            done
+          }
+          wait_for 'first frame:'
+          # Enroll a face, as the Simulator's Features > Face ID > Enrolled
+          # menu does. The smoke test waits for the lock to offer Face ID.
+          xcrun simctl spawn "$udid" notifyutil -s com.apple.BiometricKit.enrollmentChanged '1' &&
+            xcrun simctl spawn "$udid" notifyutil -p com.apple.BiometricKit.enrollmentChanged ||
+            echo "::warning::Couldn't enroll a face in the simulator."
+          wait_for 'face id:'
+          echo "$result"
+
+          # Send the app to the background by opening the Settings app. iOS
+          # then saves the app switcher's snapshot of the app, which must be
+          # blank: the app covers itself as soon as it stops being active.
+          touch "$RUNNER_TEMP/before-background"
+          xcrun simctl launch "$udid" com.apple.Preferences || true
+          sleep 5
+          snapshots=$(find "$data/Library" \( -path '*SplashBoard*' -o -path '*Snapshots*' \) -type f -newer "$RUNNER_TEMP/before-background" 2>/dev/null || true)
+          xcrun simctl terminate "$udid" "$bundle" || true
+          # Names only, to show where the app and wallet2 keep their files.
+          echo "Files in the app's folder:"
+          (cd "$data" && find . -type f -not -path './SystemData/*' | sort)
+
+          failed=
+          if [ "$result" != "$(printf 'wallet library: ok\nkeychain: ok\nsaved wallet: ok\nkey images file: ok\nlock: ok\ntor: ok\nfirst frame: ok\nface id: ok')" ]; then
+            echo "::error::The smoke test failed on the iOS simulator."
+            xcrun simctl spawn "$udid" log show --last 5m --style compact --predicate 'process == "Runner"' | tail -n 60 || true
+            failed=1
+          fi
+          for file in $leftovers; do
+            if [ -e "$data/$file" ]; then
+              echo "::error::The app didn't delete the leftover $file at launch."
+              failed=1
+            fi
+          done
+          read_any=
+          # One per line: some of iOS's snapshot folders have spaces in their names.
+          while IFS= read -r snapshot; do
+            [ -n "$snapshot" ] || continue
+            if xcrun swift tool/snapshot_colors.swift "$snapshot"; then
+              read_any=1
+            else
+              case $? in
+                3) echo "::error::The app switcher's snapshot of the app isn't blank."; failed=1 ;;
+                *) echo "::warning::Couldn't check $snapshot." ;;
+              esac
+            fi
+          done <<< "$snapshots"
+          if [ -z "$read_any" ]; then
+            echo "::error::No app switcher snapshot could be read, so it wasn't checked."
+            failed=1
+          fi
+          [ -z "$failed" ]
+
+      # Signing and TestFlight, once the Apple developer account exists. Not
+      # set up yet, so there are no secrets here. The plan:
+      # - Give the app its real bundle id (now the com.example placeholder in
+      #   ios/Runner.xcodeproj) and register it in the developer account.
+      # - Keep the signing certificate, the provisioning profile and an App
+      #   Store Connect API key without the Admin role as repository secrets.
+      # - Do the signed build and the TestFlight upload in a separate job that
+      #   runs only by hand, never for pull requests, so pull request code
+      #   never sees those secrets.

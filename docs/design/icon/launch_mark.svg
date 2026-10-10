@@ -1,0 +1,3 @@
+<!-- The eye alone, for the launch screen. The pupil is see-through, so the
+     launch screen's light or dark background shows in it. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="744" height="465" viewBox="140 279.5 744 465"><path d="M172 512 A389 389 0 0 1 852 512 A389 389 0 0 1 172 512 Z" fill="none" stroke="#F26822" stroke-width="58" stroke-linejoin="round"/><path fill="#F26822" fill-rule="evenodd" d="M370 512a142 142 0 1 0 284 0a142 142 0 1 0 -284 0Z M450 512a62 62 0 1 0 124 0a62 62 0 1 0 -124 0Z"/><circle cx="550" cy="474" r="19" fill="#F26822"/></svg>

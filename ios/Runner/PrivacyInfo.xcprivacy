@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Apple's privacy manifest for the app itself: the Runner executable, which
+  holds the Swift code in this folder and the Tor built into the app
+  (Tor.framework's tor, OpenSSL, libevent and liblzma, linked in statically).
+  The wallet library has its own manifest inside MoneroWallet.framework
+  (tool/fetch_monero_c.sh writes it), and Flutter.framework ships Flutter's.
+
+  The app tracks nobody and collects nothing: it sends nothing to its
+  developer, only talks to the node the user picks and, if the user turns it
+  on, asks Kraken for the XMR price with no wallet data (SECURITY.md rule 5).
+
+  Required reason APIs, which Tor and the libraries in it call (the Swift code
+  calls none of them):
+  - File timestamps (stat, fstat, lstat): C617.1, Tor reads and checks its
+    own files in the app's container (Library/Caches/tor).
+  - System boot time (mach_absolute_time): 35F9.1, Tor's and libevent's
+    timers measure time between events inside the app.
+  The iOS build workflow checks that every such API the app's binaries use is
+  declared here (tool/check_privacy_manifests.sh).
+-->
+<plist version="1.0">
+<dict>
+	<key>NSPrivacyTracking</key>
+	<false/>
+	<key>NSPrivacyCollectedDataTypes</key>
+	<array/>
+	<key>NSPrivacyAccessedAPITypes</key>
+	<array>
+		<dict>
+			<key>NSPrivacyAccessedAPIType</key>
+			<string>NSPrivacyAccessedAPICategoryFileTimestamp</string>
+			<key>NSPrivacyAccessedAPITypeReasons</key>
+			<array>
+				<string>C617.1</string>
+			</array>
+		</dict>
+		<dict>
+			<key>NSPrivacyAccessedAPIType</key>
+			<string>NSPrivacyAccessedAPICategorySystemBootTime</string>
+			<key>NSPrivacyAccessedAPITypeReasons</key>
+			<array>
+				<string>35F9.1</string>
+			</array>
+		</dict>
+	</array>
+</dict>
+</plist>

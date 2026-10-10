@@ -1,0 +1,3 @@
+# Hook scripts must keep LF endings or they fail on Windows checkouts.
+.githooks/* text eol=lf
+tool/*.sh text eol=lf

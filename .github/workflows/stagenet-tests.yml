@@ -1,0 +1,72 @@
+# Runs the tests that need a live stagenet node: the first-run
+# test (setup, node, first sync, key image import, Home), the sync and node
+# change test, and the test that reaches the node and Kraken through the app's
+# own Tor, connected to the real Tor network. Each wallet is a throwaway made
+# in memory during the run, on Monero's stagenet test network, so no real
+# wallet is involved.
+#
+# This is not a pull request check: public stagenet nodes go down now and
+# then, which would block merges for reasons outside the code. It runs by hand
+# (Actions > Stagenet tests > Run workflow): run it on a branch to try it
+# before merging. The nightly run, whose failures showed as red runs in the
+# Actions tab, is paused while the free Actions minutes are short (see on:).
+#
+# The spend test (test/stagenet_spend_test.dart) stays skipped here: it takes
+# coins from a public faucet and about an hour, so it is a manual run on a PC.
+#
+# A second step checks the public nodes the app offers, mainnet and stagenet
+# (test/public_nodes_test.dart): each must answer on its network, synced, and
+# over TLS or Tor. A node that fails it is one to replace in the list.
+
+name: Stagenet tests
+
+on:
+  workflow_dispatch:
+  # Paused 2026-10-10 while the free Actions minutes are short: the nightly run
+  # and the run on a pull request that changes this workflow. Uncomment these
+  # lines to turn them back on.
+  # schedule:
+  #   - cron: "23 7 * * *" # every night
+  # pull_request:
+  #   paths:
+  #     - .github/workflows/stagenet-tests.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: stagenet-tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Stagenet node tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/flutter-setup
+      # The app's public stagenet nodes (lib/node_screen.dart), in its order.
+      # The first that answers is used, so one node being down is not a failure.
+      - name: Pick a stagenet node that answers
+        env:
+          NODES: node.monerodevs.org:38089 node2.monerodevs.org:38089 xmr-lux.boldsuck.org:38081
+        run: |
+          for node in $NODES; do
+            if curl -fsS --max-time 20 -o /dev/null "http://$node/get_info"; then
+              echo "MVW_STAGENET_NODE=$node" >> "$GITHUB_ENV"
+              exit 0
+            fi
+          done
+          echo "::error::None of the public stagenet nodes answered."
+          exit 1
+      - name: Test against the node
+        run: LD_LIBRARY_PATH="$PWD/windows/monero_c" flutter test
+      # On its own: it runs a Tor of its own on the port the tests above use.
+      - name: Check the app's public nodes
+        if: ${{ !cancelled() }}
+        env:
+          MVW_CHECK_PUBLIC_NODES: "1"
+        run: LD_LIBRARY_PATH="$PWD/windows/monero_c" flutter test test/public_nodes_test.dart

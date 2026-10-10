@@ -1,0 +1,44 @@
+# Runs the Dart analyzer and the app's tests on every pull request and on main.
+# Draft pull requests are skipped, like the Claude review: the tests run when a
+# pull request is marked ready, and again on each push after that.
+#
+# Only the tests that need no network run here. The stagenet tests skip
+# themselves because MVW_STAGENET_NODE is not set: they need a live stagenet
+# node, so they run in stagenet-tests.yml instead. The spend test also
+# needs faucet coins and about an hour, so it stays a manual run on a
+# developer's PC (see README.md), as does the Windows build.
+#
+# The tests load the Linux build of monero_c from the same pinned release the
+# Windows app uses, fetched and checksum-verified by tool/fetch_monero_c.sh
+# (through .github/actions/flutter-setup).
+
+name: App tests
+
+on:
+  pull_request:
+    types: [opened, ready_for_review, reopened, synchronize]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: app-tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Analyze and test
+    if: ${{ github.event_name != 'pull_request' || !github.event.pull_request.draft }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/flutter-setup
+      - name: Analyze
+        run: flutter analyze
+      - name: Test
+        run: LD_LIBRARY_PATH="$PWD/windows/monero_c" flutter test

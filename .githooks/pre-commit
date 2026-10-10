@@ -1,0 +1,35 @@
+#!/bin/sh
+# Blocks wallet files and secrets from being committed. See SECURITY.md.
+# Enable once per clone:  git config core.hooksPath .githooks
+# CI runs this same script (it scans full history there instead of the staged diff).
+set -eu
+
+fail=0
+
+ignored=$(git ls-files --cached --ignored --exclude-standard)
+if [ -n "$ignored" ]; then
+  echo "BLOCKED: files matching .gitignore (wallet files, keys, .env) are staged or tracked:" >&2
+  echo "$ignored" >&2
+  fail=1
+fi
+
+exports=$(git grep --cached -alE '^Monero (key image|output) export' || true)
+if [ -n "$exports" ]; then
+  echo "BLOCKED: Monero wallet export files are staged or tracked:" >&2
+  echo "$exports" >&2
+  fail=1
+fi
+
+if ! command -v gitleaks >/dev/null 2>&1; then
+  echo "BLOCKED: gitleaks is not installed, so the secret scan cannot run." >&2
+  echo "Install it (Windows: winget install Gitleaks.Gitleaks) and commit again." >&2
+  exit 1
+fi
+
+if [ -n "${CI:-}" ]; then
+  gitleaks git --redact --no-banner --verbose || fail=1
+else
+  gitleaks git --pre-commit --staged --redact --no-banner --verbose || fail=1
+fi
+
+exit "$fail"

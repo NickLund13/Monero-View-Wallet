@@ -1,0 +1,35 @@
+# Wallet files and secrets. Nothing matching this file may be committed: the
+# pre-commit hook and CI fail if one is force-added. See SECURITY.md.
+# Key image exports are caught by their file header, not by name.
+
+# Monero wallet files
+*.keys
+*.keys.*
+*.address.txt
+
+# Credentials and signing material
+.env
+.env.*
+*.pem
+*.key
+*.p8
+*.p12
+*.mobileprovision
+
+# OS noise
+.DS_Store
+
+# Flutter and Dart build output and editor files
+.dart_tool/
+build/
+.flutter-plugins-dependencies
+.idea/
+*.iml
+
+# Prebuilt monero_c libraries, downloaded by tool/fetch_monero_c.sh
+windows/monero_c/
+# The Tor Project's tor, downloaded by tool/fetch_tor.sh
+windows/tor/
+ios/tor.xcframework/
+ios/monero_c/
+ios/MoneroWallet.xcframework/

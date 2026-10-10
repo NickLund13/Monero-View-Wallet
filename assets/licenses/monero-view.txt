@@ -1,0 +1,47 @@
+Monero View Wallet
+Copyright (C) 2026 NickLund13 and the Monero View Wallet contributors
+
+This program is free software: you can redistribute it and/or modify it
+under the terms of the GNU General Public License as published by the Free
+Software Foundation, version 3 of the License, with the additional
+permission below.
+
+This program is distributed in the hope that it will be useful, but
+WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
+or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for
+more details.
+
+You should have received a copy of the GNU General Public License along
+with this program, in the file LICENSE. If not, see
+<https://www.gnu.org/licenses/>.
+
+The source code is at <https://github.com/NickLund13/Monero-View-Wallet>.
+
+Additional permission under GNU GPL version 3 section 7
+
+As a special exception, the copyright holders of this program give you
+permission to convey it, or a work based on it, in object code form through
+an app store or a similar distribution service, such as Apple's App Store or
+Google Play, even though the terms of that service impose restrictions on
+recipients that the GNU GPL would otherwise forbid: for example limits on
+the number of devices, on copying or on further distribution, or code
+signing that keeps modified versions from running. Restrictions that the
+service imposes in this way do not count as further restrictions under
+sections 6 and 10 of the GNU GPL, and you need not provide Installation
+Information for copies conveyed through the service.
+
+This permission applies only if you also make the Corresponding Source of
+each version you convey through the service available to the public, free
+of charge, under the GNU GPL version 3 with this permission, for as long as
+you offer that version there. It covers only restrictions that the service
+imposes, not any that you add yourself.
+
+This permission covers this program's own code. The parts that come from
+other projects, such as Flutter, the Dart packages, the wallet library and
+Tor, keep their own licenses, which the app lists under Settings →
+Open-source licenses (docs/third-party-code.md describes those it bundles
+itself).
+
+You may remove this permission from your copy of the program, as section 7
+of the GNU GPL allows. Contributions to this program are accepted only
+under the GNU GPL version 3 with this permission.

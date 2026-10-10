@@ -1,0 +1,21 @@
+# gitleaks configuration: the default rules plus Monero-specific ones.
+# See SECURITY.md for how to handle a false positive.
+title = "Monero View Wallet"
+
+[extend]
+useDefault = true
+
+# The entropy threshold lets obviously fake values (64 zeros) through.
+[[rules]]
+id = "monero-private-key"
+description = "64 hex characters next to a view/spend/secret/seed keyword: possible Monero private key"
+regex = '''(?i)(?:view|spend|secret|private|priv|seed)[\w \t"'=:.()\[\]-]{0,40}?\b([0-9a-f]{64})\b'''
+entropy = 3
+keywords = ["view", "spend", "secret", "priv", "seed"]
+
+# ponytail: naive heuristic, English lowercase only. 24-25 words of 4+ letters
+# (legacy seed) or 16 words of 3-8 letters (polyseed) on one line.
+[[rules]]
+id = "monero-seed-phrase"
+description = "A long run of lowercase dictionary-style words: possible mnemonic seed"
+regex = '''\b(?:[a-z]{4,}[ \t]+){23,24}[a-z]{4,}\b|\b(?:[a-z]{3,8}[ \t]+){15}[a-z]{3,8}\b'''
