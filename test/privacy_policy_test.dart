@@ -45,10 +45,14 @@ void main() {
     expect(blocks.where((b) => b.$1 == Block.title), hasLength(1));
     for (final (_, text) in blocks) {
       expect('**'.allMatches(text).length.isEven, isTrue, reason: text);
-      // Links, code, emphasis with _ or a single *, numbered lists, HTML.
+      // Links, code, emphasis with _ or a single *, numbered lists, HTML,
+      // and backslash escapes, which the web page would drop the backslash
+      // of but the app would show.
       expect(
         text,
-        isNot(contains(RegExp(r'\]\(|`|(^|\s)[_*]\w|^\d+\. |<'))),
+        isNot(
+          contains(RegExp(r'\]\(|`|(^|\s)[_*]\w|^\d+\. |<|\\[!-/:-@\[-`{-~]')),
+        ),
         reason: text,
       );
     }

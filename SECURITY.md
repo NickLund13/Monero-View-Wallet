@@ -97,9 +97,10 @@ Claude subscription.
   Deleting the file in a new commit is not enough.
 - **Claude review is red:** fix each finding and push; the review runs again.
   If a finding is wrong, reply on the pull request saying why and re-run the
-  review job. Do not merge on a red or missing review. (While GitHub Actions
-  cannot start jobs, CLAUDE.md lets a review by a separate Claude session
-  stand in for the review job: the owner's decision of 2026-10-10.)
+  review job. Do not merge on a red or missing review. (When the review job
+  can't run, because GitHub Actions cannot start jobs or the job's token isn't
+  set yet, CLAUDE.md lets a review by a separate Claude session stand in for
+  it.)
 - **False positive:** prefer changing the value to an obviously fake one. If it
   is a published test vector, add the finding's fingerprint to
   `.gitleaksignore` with a comment linking the public source.
