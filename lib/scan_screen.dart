@@ -23,8 +23,14 @@ abstract interface class QrCamera {
   Future<void> openSettings();
 
   /// The live picture. It reads until it finds a QR code, hands that code's
-  /// text to [onCode] and stops. Taking the widget away turns the camera off.
-  Widget view(ValueChanged<String> onCode);
+  /// text to [onCode] and stops. With [animated] it keeps reading, and hands
+  /// over each part of an animated code as it comes into view. Taking the
+  /// widget away turns the camera off.
+  Widget view(ValueChanged<String> onCode, {bool animated = false});
+
+  /// Keeps the screen from dimming and locking while [on]: while an animated
+  /// code is shown to another device's camera, or read from its screen.
+  Future<void> keepScreenOn(bool on);
 }
 
 /// The camera Setup scans with, or null where the app has none, as in the
@@ -44,6 +50,9 @@ class IosQrCamera implements QrCamera {
 
   /// Where each camera view on screen hands its code, by platform view id.
   final _onCode = <int, ValueChanged<String>>{};
+
+  /// The views reading an animated code, which take every part.
+  final _animated = <int>{};
 
   /// Camera views on screen whose id isn't known here yet.
   var _waiting = 0;
@@ -66,7 +75,9 @@ class IosQrCamera implements QrCamera {
     final arguments = call.arguments as Map<Object?, Object?>;
     final view = arguments['view'] as int;
     final text = arguments['text'] as String;
-    final onCode = _onCode.remove(view);
+    final onCode = _animated.contains(view)
+        ? _onCode[view]
+        : _onCode.remove(view);
     if (onCode != null) {
       onCode(text);
     } else if (_waiting > 0) {
@@ -87,14 +98,20 @@ class IosQrCamera implements QrCamera {
   Future<void> openSettings() => channel.invokeMethod('openSettings');
 
   @override
-  Widget view(ValueChanged<String> onCode) => _IosCameraView(this, onCode);
+  Widget view(ValueChanged<String> onCode, {bool animated = false}) =>
+      _IosCameraView(this, onCode, animated: animated);
+
+  @override
+  Future<void> keepScreenOn(bool on) =>
+      channel.invokeMethod('keepScreenOn', on);
 }
 
 class _IosCameraView extends StatefulWidget {
-  const _IosCameraView(this.camera, this.onCode);
+  const _IosCameraView(this.camera, this.onCode, {required this.animated});
 
   final IosQrCamera camera;
   final ValueChanged<String> onCode;
+  final bool animated;
 
   @override
   State<_IosCameraView> createState() => _IosCameraViewState();
@@ -110,14 +127,16 @@ class _IosCameraViewState extends State<_IosCameraView> {
   }
 
   void _created(int id) {
-    final early = widget.camera._early.remove(id);
-    if (_id == null) widget.camera._doneWaiting();
+    final camera = widget.camera;
+    final early = camera._early.remove(id);
+    if (_id == null) camera._doneWaiting();
     _id = id;
-    if (early != null) {
-      widget.onCode(early);
-    } else {
-      widget.camera._onCode[id] = (code) => widget.onCode(code);
+    // A view for an animated code keeps taking parts after the first.
+    if (widget.animated) camera._animated.add(id);
+    if (early == null || widget.animated) {
+      camera._onCode[id] = (code) => widget.onCode(code);
     }
+    if (early != null) widget.onCode(early);
   }
 
   @override
@@ -127,6 +146,7 @@ class _IosCameraViewState extends State<_IosCameraView> {
       widget.camera._doneWaiting();
     } else {
       widget.camera._onCode.remove(id);
+      widget.camera._animated.remove(id);
       // The camera goes off now, not whenever iOS lets go of the view.
       IosQrCamera.channel.invokeMethod('stop', id);
     }
@@ -137,6 +157,8 @@ class _IosCameraViewState extends State<_IosCameraView> {
   Widget build(BuildContext context) => UiKitView(
     viewType: 'monero_view_wallet/camera',
     onPlatformViewCreated: _created,
+    creationParams: {'animated': widget.animated},
+    creationParamsCodec: const StandardMessageCodec(),
   );
 }
 
@@ -245,7 +267,7 @@ class _ScanWalletScreenState extends State<ScanWalletScreen> {
           'The GUI opens on the Spendable Wallet code. It holds your spend '
           'key, so this app refuses it.',
         ),
-        _Viewfinder(
+        Viewfinder(
           live: live,
           label: switch (_allowed) {
             null => '',
@@ -341,9 +363,11 @@ class _Step extends StatelessWidget {
 }
 
 /// The camera's picture in a rounded frame, with corner guides that are
-/// orange while it reads and grey while it is off.
-class _Viewfinder extends StatelessWidget {
-  const _Viewfinder({
+/// orange while it reads and grey while it is off. Without a [camera] it shows
+/// [label].
+class Viewfinder extends StatelessWidget {
+  const Viewfinder({
+    super.key,
     required this.live,
     required this.label,
     required this.camera,
@@ -507,6 +531,40 @@ class _RefusalCard extends StatelessWidget {
         c.amber,
       ),
     };
+    return ScanProblemCard(
+      title: title,
+      body: body,
+      color: icon,
+      onScanAgain: onScanAgain,
+      other: typeIn ? ('Type it in instead', onTypeIn) : null,
+    );
+  }
+}
+
+/// Why a scanned code was refused or can't be used yet, with Scan again and
+/// maybe one [other] way on.
+class ScanProblemCard extends StatelessWidget {
+  const ScanProblemCard({
+    super.key,
+    required this.title,
+    required this.body,
+    required this.color,
+    required this.onScanAgain,
+    this.other,
+  });
+
+  final String title;
+  final String body;
+
+  /// The warning icon's: red for a code that must never be used, amber for
+  /// one that is only the wrong one.
+  final Color color;
+  final VoidCallback onScanAgain;
+  final (String, VoidCallback)? other;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
     return AppCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -520,7 +578,11 @@ class _RefusalCard extends StatelessWidget {
                   color: c.btn2,
                   shape: BoxShape.circle,
                 ),
-                child: Icon(Icons.warning_amber_rounded, size: 20, color: icon),
+                child: Icon(
+                  Icons.warning_amber_rounded,
+                  size: 20,
+                  color: color,
+                ),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -550,18 +612,18 @@ class _RefusalCard extends StatelessWidget {
                   child: const Text('Scan again'),
                 ),
               ),
-              if (typeIn) ...[
+              if (other case (final label, final onPressed)) ...[
                 const SizedBox(width: 8),
                 Expanded(
                   child: FilledButton(
-                    onPressed: onTypeIn,
+                    onPressed: onPressed,
                     style: context.secondaryButton.copyWith(
                       backgroundColor: WidgetStatePropertyAll(c.btn2),
                       minimumSize: const WidgetStatePropertyAll(
                         Size.fromHeight(44),
                       ),
                     ),
-                    child: const Text('Type it in instead'),
+                    child: Text(label),
                   ),
                 ),
               ],

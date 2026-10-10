@@ -2,7 +2,7 @@
 
 A view-only Monero wallet for iPhone. It shows a wallet's balance and history
 from the wallet's address and secret view key, and the key images you export
-from the Monero GUI, which show what the wallet has spent. It never asks for a
+from the Monero GUI or a signing device, which show what the wallet has spent. It never asks for a
 spend key or seed, so it can't spend.
 
 - [Privacy policy](privacy-policy.md)

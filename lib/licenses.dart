@@ -63,6 +63,8 @@ const bundledLicenses = <(List<String>, String, Build)>[
   (['trezor-common'], 'trezor-common.txt', Build.both),
   (['monero_c', 'polyseed', 'trezor-common'], 'gpl-3.0.txt', Build.both),
   (['utf8proc'], 'utf8proc.txt', Build.both),
+  // Also the app's own reader of animated QR codes, lib/ur.dart, a port of
+  // bc-ur's decoder.
   (['bc-ur'], 'bc-ur.txt', Build.both),
   (['Boost'], 'boost.txt', Build.both),
   (['OpenSSL'], 'openssl.txt', Build.both),

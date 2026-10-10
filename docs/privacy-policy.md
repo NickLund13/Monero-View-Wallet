@@ -2,7 +2,7 @@
 
 Last updated: 10 October 2026
 
-Monero View is a view-only Monero wallet for iPhone. It shows a wallet's balance and history from the wallet's address and secret view key, and the key images you export from the Monero GUI. This policy says what the app keeps, what it sends and to whom, and how to delete it.
+Monero View is a view-only Monero wallet for iPhone. It shows a wallet's balance and history from the wallet's address and secret view key, and the key images you export from the Monero GUI or a signing device. This policy says what the app keeps, what it sends and to whom, and how to delete it.
 
 ## In short
 
@@ -15,7 +15,7 @@ Monero View is a view-only Monero wallet for iPhone. It shows a wallet's balance
 
 All of it stays in the app's own storage on the iPhone, which other apps can't read.
 
-- **Your wallet:** its address and secret view key, and what the app finds on the blockchain for it: payments received, imported key images, spends, the balance and the history. With it are the subaddresses made on Receive and their labels, the wallet's name, its restore height and subaddress lookahead, the node you chose and the public nodes you added, whether you use Tor, when the node last answered, the time, file name and counts of the last key images import, and your Face ID to open and Test speed settings. All of this is in the wallet's two files, which are encrypted with a password the app makes at random.
+- **Your wallet:** its address and secret view key, and what the app finds on the blockchain for it: payments received, imported key images, spends, the balance and the history. With it are the subaddresses made on Receive and their labels, the wallet's name, its restore height and subaddress lookahead, the node you chose and the public nodes you added, whether you use Tor, when the node last answered, the time, file name (or that it came by QR code) and counts of the last key images import, and your Face ID to open and Test speed settings. All of this is in the wallet's two files, which are encrypted with a password the app makes at random.
 - **That password,** in the iPhone's Keychain. Only this app can read it, only while the iPhone is unlocked, and only on this iPhone: it is not synced to iCloud Keychain and does not move to another phone with a backup. You never see or type it.
 - **Two display choices,** Appearance (System, Light or Dark) and Show USD value (on or off), each kept as one word in a plain file. They say nothing about the wallet.
 - **Monero's ring database.** Once you import key images, the wallet library records there the ring of each spend it sees, encrypted with a key made from the view key.
@@ -26,7 +26,9 @@ The wallet's files, the display choices and the ring database are kept out of iC
 
 Face ID and the iPhone's passcode are checked by iOS. The app only learns whether the check passed, never your face or your passcode.
 
-Scan QR code, at setup, uses the iPhone's camera once you allow it. The picture is read on the iPhone to find the code and is never saved or sent, and the camera turns off as soon as a code is read. A code that holds a spend key or seed is refused and nothing from it is kept. The address, view key or restore height a good code holds go into the setup fields, as if you had typed them.
+Scan QR code, at setup, and Key images by QR use the iPhone's camera once you allow it. The picture is read on the iPhone to find the code and is never saved or sent, and the camera turns off as soon as a code is read, or for an animated key images code once all of it is read. A code that holds a spend key or seed is refused and nothing from it is kept. The address, view key or restore height a good code holds go into the setup fields, as if you had typed them. A key images code is held in memory, never in a file, until it is imported like a key images file.
+
+Key images by QR also shows the wallet's outputs on screen, as an animated QR code for your signing device to read, and keeps the screen on while it is open. The wallet library encrypts the outputs with the view key, so only a device with the view key can read them. Someone who photographs the code can tell from its length roughly how many outputs it holds, and nothing else. The code is never saved or sent.
 
 ## What the app sends, and to whom
 
@@ -40,7 +42,7 @@ The node sees:
 
 - your IP address, or a Tor address with Tor on, and when the app is open;
 - which blocks the app downloads, which shows from which block your wallet's history starts;
-- when you import key images, the key images in the file, because the app asks the node which of them are spent. The node can then tell that they all belong to one wallet and, through them, which transactions spent from it, and link that to your IP address. Tor hides your IP address but not that link. Your own node keeps all of this to yourself.
+- when you import key images, the key images you import, from a file or a QR code, because the app asks the node which of them are spent. The node can then tell that they all belong to one wallet and, through them, which transactions spent from it, and link that to your IP address. Tor hides your IP address but not that link. Your own node keeps all of this to yourself.
 
 The node never gets your view key, your address, your balance or your labels.
 

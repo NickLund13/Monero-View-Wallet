@@ -62,7 +62,8 @@ to service the transmitted request in real time"
 sends nothing to its developer. The node is one the user picks, Test speed
 only asks public nodes for their block height, Kraken only answers a price
 request, none of them gets wallet data, and no code of theirs is in the app.
-The camera (Scan wallet QR at setup) is read on the phone by Apple's own
+The camera (Scan wallet QR at setup, and Key images by QR) is read on the
+phone by Apple's own
 AVFoundation and the picture is never saved or sent, so it collects nothing
 either; the App Review note can say so if asked why the app uses the camera.
 

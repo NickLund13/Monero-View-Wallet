@@ -131,6 +131,9 @@ void main() {
           mainnet,
           query: 'view_key=$zeros&height=1&note=${words(13, '%20')}',
         ),
+        // A seed as a UR code, in one code or animated: the type says it.
+        'ur:crypto-seed/${'ae' * 20}',
+        'UR:CRYPTO-SEED/1-3/${'ae' * 20}',
       ]) {
         expect(await refusal(code), Refusal.spendKey, reason: code);
       }
@@ -152,6 +155,7 @@ void main() {
       'monero:$mainnet?',
       'monero:',
       'ur:xmr-output/1-3/lpadaxcsencylobemohsgmoyadhdeynteelblrcygldwvarflojtcywlspdkfmzm',
+      'ur:xmr-keyimage/${'ae' * 20}',
       'https://example.com/?view_key=$zeros',
       // The GUI's code with a value missing, changed or added.
       'monero-wallet:$mainnet',
@@ -641,6 +645,82 @@ void main() {
       expect(textIn(tester, address), full.address());
     });
 
+    testWidgets(
+      'the iPhone camera hands over an animated code part by part, and keeps '
+      'the screen on when asked',
+      (tester) async {
+        final messenger = tester.binding.defaultBinaryMessenger;
+        final asked = <MethodCall>[];
+        messenger.setMockMethodCallHandler(IosQrCamera.channel, (call) async {
+          asked.add(call);
+          return null;
+        });
+        Future<void> read(int view, String text) =>
+            messenger.handlePlatformMessage(
+              IosQrCamera.channel.name,
+              IosQrCamera.channel.codec.encodeMethodCall(
+                MethodCall('code', {'view': view, 'text': text}),
+              ),
+              (_) {},
+            );
+        final made = <Map<Object?, Object?>>[];
+        messenger.setMockMethodCallHandler(SystemChannels.platform_views, (
+          call,
+        ) async {
+          if (call.method == 'create') {
+            final arguments = call.arguments as Map<Object?, Object?>;
+            made.add(arguments);
+            // The first part comes before the app hears the view was made.
+            await read(arguments['id']! as int, 'part 1');
+          }
+          return null;
+        });
+        addTearDown(() {
+          messenger.setMockMethodCallHandler(IosQrCamera.channel, null);
+          messenger.setMockMethodCallHandler(
+            SystemChannels.platform_views,
+            null,
+          );
+        });
+        final camera = IosQrCamera();
+        final parts = <String>[];
+
+        await tester.pumpWidget(
+          Directionality(
+            textDirection: TextDirection.ltr,
+            child: camera.view(parts.add, animated: true),
+          ),
+        );
+        await tester.pump();
+        expect(made, hasLength(1));
+        // The Runner is told to keep reading.
+        expect(
+          const StandardMessageCodec().decodeMessage(
+            ByteData.sublistView(made.single['params']! as Uint8List),
+          ),
+          {'animated': true},
+        );
+        final view = made.single['id']! as int;
+        await read(view, 'part 2');
+        await read(view, 'part 3');
+        expect(parts, ['part 1', 'part 2', 'part 3']);
+        expect(camera.heldCodes, 0);
+
+        await camera.keepScreenOn(true);
+        await camera.keepScreenOn(false);
+        // Taking the view away stops its camera, and drops what it still
+        // reads.
+        await tester.pumpWidget(const SizedBox());
+        await read(view, 'part 4');
+        expect(parts, hasLength(3));
+        expect(asked.map((call) => (call.method, call.arguments)), [
+          ('keepScreenOn', true),
+          ('keepScreenOn', false),
+          ('stop', view),
+        ]);
+      },
+    );
+
     testWidgets('says when the camera is off, and goes back to typing', (
       tester,
     ) async {
@@ -677,10 +757,13 @@ class _FakeCamera implements QrCamera {
   Future<void> openSettings() async => settingsOpened++;
 
   @override
-  Widget view(ValueChanged<String> onCode) {
+  Widget view(ValueChanged<String> onCode, {bool animated = false}) {
     _onCode = onCode;
     return const SizedBox.expand(key: Key('camera'));
   }
+
+  @override
+  Future<void> keepScreenOn(bool on) async {}
 
   void show(String code) => _onCode!(code);
 }
