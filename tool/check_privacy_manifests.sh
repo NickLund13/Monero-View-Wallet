@@ -16,9 +16,13 @@ fail=0
 # Prints the categories of the required reason APIs that $1 calls, one per
 # line. The symbols are Apple's list for each category:
 # https://developer.apple.com/documentation/bundleresources/describing-use-of-required-reason-api
+# Fails if it can't read $1, so an unreadable executable never passes as one
+# that calls none.
 used_categories() {
+  symbols=$(nm -u "$1") || return 1
+  names=$(strings -a "$1") || return 1
   {
-    nm -u "$1" | awk '{ print $NF }' | while read -r symbol; do
+    printf '%s\n' "$symbols" | awk '{ print $NF }' | while read -r symbol; do
       case $symbol in
         _stat | _fstat | _fstatat | _lstat | _getattrlistbulk | \
           _NSFileCreationDate | _NSFileModificationDate | \
@@ -35,7 +39,6 @@ used_categories() {
       esac
     done
     # Objective-C methods are called by name, so look for the names.
-    names=$(strings -a "$1")
     if echo "$names" | grep -qx systemUptime; then echo SystemBootTime; fi
     if echo "$names" | grep -qx activeInputModes; then echo ActiveKeyboards; fi
   } | sort -u
@@ -43,8 +46,12 @@ used_categories() {
 
 # check <executable> <its bundle's manifest>
 check() {
-  used=$(used_categories "$1")
   name=${1#"$app"/}
+  if ! used=$(used_categories "$1"); then
+    echo "::error::$name couldn't be read to find the APIs it calls."
+    fail=1
+    return
+  fi
   if [ ! -f "$2" ]; then
     if [ -n "$used" ]; then
       echo "::error::$name calls APIs Apple asks reasons for ($(echo $used)), but its bundle has no privacy manifest."

@@ -455,9 +455,10 @@ List<String> inAppTorArguments(String folder) => [
 /// The one Tor the app runs. Tests replace it.
 BuiltInTor builtInTor = BuiltInTor();
 
-/// True for an onion address, which only Tor can reach.
+/// True for an onion address, which only Tor can reach, also written with
+/// the root's dot after it.
 bool isOnion(String node) =>
-    node.toLowerCase().contains(RegExp(r'\.onion(:\d+)?$'));
+    node.toLowerCase().contains(RegExp(r'\.onion\.?(:\d+)?$'));
 
 /// A connection to [host]:[port] made by the Tor at [proxy] (SOCKS5, RFC
 /// 1928). [host] goes to Tor as a name, so Tor looks it up and this device's

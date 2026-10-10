@@ -303,9 +303,10 @@ The iPhone offers this app for any file in "Open in…" and the share sheet,
 because the GUI's file has no extension of its own to recognise it by. The
 app never becomes the one that opens files by default.
 
-Remove wallet deletes the password, then both files. Deleting the app deletes
-its folder, but iOS keeps Keychain items after an app is deleted: the password
-stays behind, opening nothing, until the app is installed and set up again.
+Remove wallet deletes the password, then both files, and empties the ring
+database. Deleting the app deletes its folder, but iOS keeps Keychain items
+after an app is deleted: the password stays behind, opening nothing, until the
+app is installed and set up again.
 Not tried on a real iPhone yet, only on the simulator (TestFlight comes with
 the Apple developer account).
 

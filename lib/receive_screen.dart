@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'qr_tile.dart';
+import 'secret_guard.dart';
 import 'session.dart';
 import 'ui.dart';
 import 'wallet.dart';
@@ -23,6 +24,10 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
   late String _address;
   final _label = TextEditingController();
   bool _copied = false;
+
+  /// A seed phrase or a private key was just pasted into the label, and
+  /// refused.
+  bool _refused = false;
 
   WalletSession get _s => widget.session;
 
@@ -182,13 +187,27 @@ class _ReceiveScreenState extends State<ReceiveScreen> {
           TextField(
             key: const Key('label'),
             controller: _label,
-            onChanged: (label) => _s.wallet.setLabel(_index, label),
+            onChanged: (label) {
+              _s.wallet.setLabel(_index, label);
+              if (_refused) setState(() => _refused = false);
+            },
+            inputFormatters: [
+              RefuseSecrets(() => setState(() => _refused = true)),
+            ],
             textCapitalization: TextCapitalization.sentences,
-            // Keeps the keyboard from learning the label (Android).
+            // Keeps the keyboard from learning the label: no autocorrection
+            // or suggestions on iPhone, no personalized learning on Android.
+            autocorrect: false,
+            enableSuggestions: false,
             enableIMEPersonalizedLearning: false,
             decoration: InputDecoration(
               hintText: 'e.g. Rent from Alex',
               fillColor: c.card,
+              errorText: _refused
+                  ? 'That looks like a seed phrase or a private key, so it '
+                        'was left out. $neverEnterSeed'
+                  : null,
+              errorMaxLines: 4,
             ),
           ),
           const SizedBox(height: 24),

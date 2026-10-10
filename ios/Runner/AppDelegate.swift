@@ -36,7 +36,10 @@ import UIKit
 /// and passcode stay with iOS.
 final class AppLock: NSObject, FlutterPlugin {
   /// Hides the app while it isn't active: iOS takes the app switcher's
-  /// snapshot then, and it must never show the balance.
+  /// snapshot then, and it must never show the balance. It stays on after the
+  /// app is active again until the Dart side has drawn the app as it is now,
+  /// the lock screen if the app locked: until then the app still shows what
+  /// it showed before it went away.
   private var cover: UIView?
 
   static func register(with registrar: FlutterPluginRegistrar) {
@@ -64,6 +67,13 @@ final class AppLock: NSObject, FlutterPlugin {
         reason: arguments?["reason"] as? String ?? "Unlock your wallet",
         passcode: arguments?["passcode"] as? Bool ?? true,
         result: result)
+    case "uncover":
+      // Only while the app is active: one that went away again since keeps
+      // its cover for the snapshot.
+      if UIApplication.shared.applicationState == .active {
+        uncover()
+      }
+      result(nil)
     default:
       result(FlutterMethodNotImplemented)
     }
@@ -143,7 +153,19 @@ final class AppLock: NSObject, FlutterPlugin {
     cover = view
   }
 
+  /// The Dart side asks for the cover to come off once it has drawn a frame
+  /// (lib/lock.dart). If it never does, the cover comes off by itself.
   @objc private func sceneDidActivate(_ notification: Notification) {
+    let shown = cover
+    DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in
+      guard let self, let shown, self.cover === shown,
+        UIApplication.shared.applicationState == .active
+      else { return }
+      self.uncover()
+    }
+  }
+
+  private func uncover() {
     cover?.removeFromSuperview()
     cover = nil
   }

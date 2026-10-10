@@ -55,7 +55,8 @@ Future<void> main() async {
   });
 }
 
-/// The lock's checks answer through ios/Runner/AppDelegate.swift. No face is
+/// The lock's checks answer through ios/Runner/AppDelegate.swift, and so does
+/// taking its cover off the app (with no cover up, nothing to do). No face is
 /// enrolled yet, so the lock can't offer Face ID, and the Face ID check says
 /// so at once, without showing anything. The simulator may count as having a
 /// passcode (it does in Xcode 26); only without one is the passcode check
@@ -65,6 +66,7 @@ Future<String> _lock() async {
   try {
     const check = IosOwnerCheck();
     const wait = Duration(seconds: 20);
+    await AppLock().uncover().timeout(wait);
     final kind = await check.kind().timeout(wait);
     if (kind != Unlock.passcode && kind != Unlock.none) {
       return 'unexpected: can lock with ${kind.name}';

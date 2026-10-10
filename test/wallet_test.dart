@@ -13,6 +13,7 @@
 
 import 'dart:convert';
 import 'dart:io';
+import 'dart:isolate';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -233,9 +234,14 @@ void main() {
     expect(nodeProblem('node.example.org:99999'), contains('host:port'));
     expect(nodeProblem('user:pass@node.example.org:1'), contains('host:port'));
     expect(nodeProblem('${'a' * 56}.onion:38081'), isNull);
+    // A name with the root's dot after it, or an empty label.
+    expect(nodeProblem('node.example.org.:38089'), contains('host:port'));
+    expect(nodeProblem('${'a' * 56}.onion.:38081'), contains('host:port'));
+    expect(nodeProblem('.example.org:38089'), contains('host:port'));
+    expect(nodeProblem('node..example.org:38089'), contains('host:port'));
   });
 
-  test('checks a view key against its address', () {
+  test('checks a view key against its address', () async {
     String? problem(String address, String viewKey) =>
         ViewWallet.keysProblem(address: address, viewKey: viewKey);
     expect(problem(full.address(), full.secretViewKey()), isNull);
@@ -244,6 +250,18 @@ void main() {
       problem('5${'1' * 94}', full.secretViewKey()),
       'failed to parse address',
     );
+    // On a helper isolate, as Scan wallet QR asks, again and again: the
+    // wallet it checks with is freed each time, not left behind.
+    final address = full.address();
+    final key = full.secretViewKey();
+    for (var i = 0; i < 3; i++) {
+      expect(
+        await Isolate.run(
+          () => ViewWallet.keysProblem(address: address, viewKey: key),
+        ),
+        isNull,
+      );
+    }
   });
 
   testWidgets('a pasted seed phrase is refused and wiped at once', (
@@ -315,6 +333,66 @@ void main() {
     await tester.pumpAndSettle();
     expect(textIn(tester, viewKey), isEmpty);
     expect(enabled(tester, 'Continue'), isFalse);
+  });
+
+  testWidgets(
+    'empties the clipboard after a paste, once the key is used or wiped',
+    (tester) async {
+      final clipboard = <String>[];
+      final messenger = tester.binding.defaultBinaryMessenger;
+      messenger.setMockMethodCallHandler(SystemChannels.platform, (call) async {
+        if (call.method == 'Clipboard.setData') {
+          clipboard.add((call.arguments as Map)['text'] as String);
+        }
+        return null;
+      });
+      addTearDown(
+        () => messenger.setMockMethodCallHandler(SystemChannels.platform, null),
+      );
+
+      await phone(tester);
+      await tester.pumpWidget(const MainApp());
+      // enterText puts the whole text in at once, as a paste does.
+      await tester.enterText(address, full.address());
+      await tester.enterText(restoreHeight, '100');
+      await tester.pump();
+      expect(clipboard, isEmpty, reason: 'the key is still to come');
+
+      // Not this address's view key, so maybe the spend key: wiped, and off
+      // the clipboard.
+      await tester.enterText(viewKey, '0' * 64);
+      await tester.pump();
+      expect(textIn(tester, viewKey), isEmpty);
+      expect(clipboard, ['']);
+
+      await tester.enterText(viewKey, full.secretViewKey());
+      await tester.pump();
+      expect(clipboard, [''], reason: 'kept until the wallet is made');
+      await tester.tap(find.text('Continue'));
+      await tester.pumpAndSettle();
+      expect(clipboard, ['', '']);
+      await tester.tap(find.text('Back'));
+      await tester.pumpAndSettle();
+    },
+  );
+
+  testWidgets('refuses a restore height after the newest block', (
+    tester,
+  ) async {
+    await phone(tester);
+    await tester.pumpWidget(const MainApp());
+    await tester.enterText(address, full.address());
+    await tester.enterText(viewKey, full.secretViewKey());
+    final tip = approximateHeight(Network.stagenet);
+    await tester.enterText(restoreHeight, '${tip + 60000}');
+    await tester.pump();
+    expect(find.textContaining('after the newest block'), findsOne);
+    expect(enabled(tester, 'Continue'), isFalse);
+
+    await tester.enterText(restoreHeight, '${tip + 1000}');
+    await tester.pump();
+    expect(find.textContaining('after the newest block'), findsNothing);
+    expect(enabled(tester, 'Continue'), isTrue);
   });
 
   test('creates a view-only wallet from address and view key', () {
@@ -433,6 +511,51 @@ void main() {
       expect(keyImagesInFile(164 + 3 * 96 + 1), isNull);
     },
   );
+
+  test('reads only a key images export, by its header and size', () {
+    final dir = Directory.systemTemp.createTempSync('mvw_test');
+    addTearDown(() => dir.deleteSync(recursive: true));
+    final own = '${dir.path}/own_key_images';
+    expect(full.exportKeyImages(own, all: true), isTrue);
+    expect(looksLikeKeyImagesFile(own), isTrue);
+
+    final outputs = '${dir.path}/outputs';
+    File(outputs).writeAsBytesSync([
+      ...'Monero output export'.codeUnits,
+      4,
+      ...List.filled(100, 0),
+    ]);
+    expect(looksLikeKeyImagesFile(outputs), isFalse);
+    expect(looksLikeKeyImagesFile('${dir.path}/missing'), isFalse);
+    expect(looksLikeKeyImagesFile(dir.path), isFalse, reason: 'a folder');
+
+    // The right header on a file far bigger than any export: refused before
+    // wallet2 reads all of it into memory.
+    final huge = '${dir.path}/huge';
+    File(huge).openSync(mode: FileMode.write)
+      ..writeFromSync(File(own).readAsBytesSync())
+      ..truncateSync(maxKeyImagesFile + 1)
+      ..closeSync();
+    expect(looksLikeKeyImagesFile(huge), isFalse);
+  });
+
+  test('Remove wallet empties the ring database the app owns', () {
+    final dir = Directory.systemTemp.createTempSync('mvw_test');
+    addTearDown(() => dir.deleteSync(recursive: true));
+    final rings = Directory('${dir.path}/rings');
+    Directory('${rings.path}/stagenet').createSync(recursive: true);
+    File('${rings.path}/data.mdb').writeAsStringSync('made up');
+    File('${rings.path}/stagenet/data.mdb').writeAsStringSync('made up');
+    walletFile = '${dir.path}${Platform.pathSeparator}wallet';
+    ringDatabase = rings.path;
+    addTearDown(() {
+      walletFile = null;
+      ringDatabase = null;
+    });
+    ViewWallet.forgetSaved();
+    expect(rings.existsSync(), isTrue, reason: 'kept out of backups');
+    expect(rings.listSync(), isEmpty);
+  });
 
   test('shows its outputs as an animated code, and imports the key images code '
       'a signing device shows back', () async {
@@ -1443,7 +1566,17 @@ void main() {
     await tester.tap(find.text('Share'));
     expect(shared, [full.address(addressIndex: 1)]);
 
-    await tester.enterText(find.byKey(const Key('label')), 'Rent from Alex');
+    // A seed pasted as a label is refused, and never kept in the wallet.
+    final label = find.byKey(const Key('label'));
+    await tester.enterText(label, List.filled(12, 'fake').join(' '));
+    await tester.pump();
+    expect(find.textContaining('so it was left out'), findsOne);
+    expect(textIn(tester, label), isEmpty);
+    expect(wallet.label(1), isEmpty);
+
+    await tester.enterText(label, 'Rent from Alex');
+    await tester.pump();
+    expect(find.textContaining('so it was left out'), findsNothing);
     expect(wallet.label(1), 'Rent from Alex');
 
     await tester.tap(find.text('New'));

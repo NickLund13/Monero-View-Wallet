@@ -97,6 +97,12 @@ const maxLookahead = 100000;
 /// means nothing is saved and every wallet lives in memory only. main() sets it.
 String? walletFile;
 
+/// wallet2's ring database on the iPhone (see the README), which only this
+/// app's wallets use, so [ViewWallet.forgetSaved] empties it. Null where the
+/// app doesn't own it: the Windows build shares the Monero GUI's. main() sets
+/// it.
+String? ringDatabase;
+
 /// What the password is filed under in the device's secure storage: the
 /// wallet file's path on Windows. An iPhone app's folder moves when the app is
 /// updated, so there it is the file's name only.
@@ -127,6 +133,28 @@ String formatXmr(int atomic, {bool short = false}) {
   final decimals = (atomic % atomicUnitsPerXmr).toString().padLeft(12, '0');
   return '${atomic ~/ atomicUnitsPerXmr}.'
       '${short ? decimals.substring(0, 4) : decimals.replaceFirst(RegExp(r'0{0,8}$'), '')}';
+}
+
+/// What a key images file starts with (wallet2's KEY_IMAGE_EXPORT_FILE_MAGIC).
+const _keyImagesMagic = 'Monero key image export\x03';
+
+/// Far bigger than any wallet's key images file: about 700,000 outputs.
+const maxKeyImagesFile = 64 * 1024 * 1024;
+
+/// True if the file at [path] starts like a key images file and isn't too big
+/// to be one. Reads only its first few bytes.
+bool looksLikeKeyImagesFile(String path) {
+  RandomAccessFile? file;
+  try {
+    file = File(path).openSync();
+    if (file.lengthSync() > maxKeyImagesFile) return false;
+    return String.fromCharCodes(file.readSync(_keyImagesMagic.length)) ==
+        _keyImagesMagic;
+  } on FileSystemException {
+    return false;
+  } finally {
+    file?.closeSync();
+  }
 }
 
 class WalletException implements Exception {
@@ -241,19 +269,32 @@ class ViewWallet {
   /// address", "view key does not match address" or "failed to verify secret
   /// view key".
   ///
-  /// Checked by making a wallet and dropping it, which takes a third of a
-  /// second when the keys match. monero_c's own keyValid can't be used: it
+  /// Checked by making a wallet in memory and freeing it before returning,
+  /// which takes a third of a second when the keys match. Freed at once, not
+  /// with [close]: on a helper isolate that ends as soon as this returns,
+  /// [close] would never get to run, and the wallet would keep the view key
+  /// in memory until the app quits. monero_c's own keyValid can't be used: it
   /// reads every network except mainnet as testnet.
   static String? keysProblem({
     required String address,
     required String viewKey,
   }) {
-    try {
-      create(address: address, viewKey: viewKey, restoreHeight: 0).close();
-      return null;
-    } on WalletException catch (e) {
-      return e.message;
-    }
+    final network = networkOf(address);
+    if (network == null) return 'failed to parse address';
+    final manager = MoneroWalletManagerFactory().getWalletManager();
+    final wallet = manager.createWalletFromKeys(
+      path: '', // in memory only
+      password: '',
+      nettype: network.id,
+      restoreHeight: 0,
+      addressString: address,
+      viewKeyString: viewKey,
+      spendKeyString: '',
+    );
+    final problem = wallet.status() == 0 ? null : wallet.errorString();
+    // Never connected, so its sync thread has nothing to finish.
+    manager.closeWallet(wallet, false);
+    return problem;
   }
 
   /// The height [node] ("host:port") reports, 0 if it can't be reached, and
@@ -448,9 +489,10 @@ class ViewWallet {
       walletFile != null && File('$walletFile.keys').existsSync();
 
   /// Deletes the saved wallet: its password first, without which the files
-  /// can't be read, then the files. Close the wallet before calling this:
-  /// Windows won't delete a keys file that is open. A file that can't be
-  /// deleted stays behind unreadable, until the next [create] tries again.
+  /// can't be read, then the files, and empties [ringDatabase]. Close the
+  /// wallet before calling this: Windows won't delete a keys file that is
+  /// open. A file that can't be deleted stays behind unreadable, until the
+  /// next [create] tries again.
   static void forgetSaved() {
     final path = walletFile;
     if (path == null) return;
@@ -459,6 +501,21 @@ class ViewWallet {
     // middle of writing either, and the address file (see [create]).
     for (final suffix in ['', '.new', '.keys', '.keys.new', '.address.txt']) {
       _delete('$path$suffix');
+    }
+    // The rings it saw, for each network. The folder stays, so it stays out
+    // of backups.
+    final rings = ringDatabase;
+    if (rings == null) return;
+    try {
+      for (final entry in Directory(rings).listSync()) {
+        try {
+          entry.deleteSync(recursive: true);
+        } on FileSystemException {
+          // Encrypted with a key made from the view key, which is gone now.
+        }
+      }
+    } on FileSystemException {
+      // wallet2 never made it.
     }
   }
 
@@ -671,8 +728,18 @@ class ViewWallet {
   /// wallet2 asks the node which of the key images are spent, and refuses to
   /// do that unless the node is marked trusted: the node learns that these key
   /// images belong to one wallet. The mark is kept only for this call.
-  Future<void> importKeyImages(String path) =>
-      _importKeyImages((w) => w.importKeyImages(path));
+  ///
+  /// Any file can be opened with the app, so one that doesn't start like a
+  /// key images file, or is far too big to be one, is refused before wallet2
+  /// reads all of it into memory.
+  Future<void> importKeyImages(String path) {
+    if (!looksLikeKeyImagesFile(path)) {
+      return Future.error(
+        WalletException('Bad key image export file magic: not read'),
+      );
+    }
+    return _importKeyImages((w) => w.importKeyImages(path));
+  }
 
   /// Imports the key images a signing device showed as an animated QR code,
   /// given as one UR code of type xmr-keyimage (UrReader.asOneCode in

@@ -7,16 +7,17 @@ import 'node_screen.dart';
 import 'pick_file.dart';
 import 'privacy_policy.dart';
 import 'scan_screen.dart';
+import 'secret_guard.dart';
 import 'session.dart';
 import 'ui.dart';
 import 'wallet.dart';
 import 'wallet_qr.dart';
 
-const _neverEnterSeed =
-    'Never enter your 25-word seed or spend key. '
-    "This app only watches; it can't send funds.";
-
 final _whitespace = RegExp(r'\s');
+
+/// How far past wallet2's estimate of the newest block a restore height may
+/// be: about 70 days of blocks, more than the estimate is ever off by.
+const _heightAhead = 50000;
 
 /// What a secret view key looks like: 64 hex characters.
 final _viewKeyPattern = RegExp(r'^[0-9a-fA-F]{64}$');
@@ -26,7 +27,7 @@ final _viewKeyPattern = RegExp(r'^[0-9a-fA-F]{64}$');
 String? viewKeyProblem(String input) {
   if (_viewKeyPattern.hasMatch(input)) return null;
   if (input.contains(_whitespace)) {
-    return 'That looks like a seed phrase. $_neverEnterSeed';
+    return 'That looks like a seed phrase. $neverEnterSeed';
   }
   return 'The secret view key is 64 characters, 0-9 and a-f.';
 }
@@ -39,7 +40,7 @@ final _addressPattern = RegExp(r'^[1-9A-HJ-NP-Za-km-z]{95}$');
 String? addressProblem(String input) {
   if (input.contains(_whitespace) || _viewKeyPattern.hasMatch(input)) {
     return 'That looks like a seed phrase or a private key, not an address. '
-        '$_neverEnterSeed';
+        '$neverEnterSeed';
   }
   if (!_addressPattern.hasMatch(input)) {
     return 'The primary address is 95 characters and starts with 4.';
@@ -85,6 +86,25 @@ class _SetupScreenState extends State<SetupScreen> {
   bool _addressFromQr = false;
   bool _keyFromQr = false;
 
+  /// True once something was pasted into the address or the view key: the
+  /// clipboard may still hold it, or a seed or spend key pasted by mistake.
+  bool _pasted = false;
+
+  /// Notes a paste into the field it is given to.
+  late final _notePaste = TextInputFormatter.withFunction((before, after) {
+    if (pastedIn(before, after)) _pasted = true;
+    return after;
+  });
+
+  /// Empties the clipboard after a paste, once the app has what it needs
+  /// from it or has wiped what shouldn't have been pasted, so other apps
+  /// can't read the key from it later.
+  void _clearClipboard() {
+    if (!_pasted) return;
+    _pasted = false;
+    Clipboard.setData(const ClipboardData(text: ''));
+  }
+
   @override
   void initState() {
     super.initState();
@@ -119,7 +139,21 @@ class _SetupScreenState extends State<SetupScreen> {
     super.dispose();
   }
 
-  int? get _height => int.tryParse(_restoreHeight.text);
+  /// The restore height typed or scanned, or null while it can't be used.
+  int? get _height {
+    final height = int.tryParse(_restoreHeight.text);
+    return height == null || _heightTooHigh ? null : height;
+  }
+
+  /// True for a restore height well past the newest block of the address's
+  /// network: from there the scan would find nothing, and a balance of 0
+  /// would look right.
+  bool get _heightTooHigh {
+    final height = int.tryParse(_restoreHeight.text);
+    final address = _address.text.trim();
+    if (height == null || addressProblem(address) != null) return false;
+    return height > approximateHeight(networkOf(address)!) + _heightAhead;
+  }
 
   bool get _stagenet {
     final address = _address.text.trim();
@@ -140,11 +174,13 @@ class _SetupScreenState extends State<SetupScreen> {
     if (address.contains(_whitespace) || _viewKeyPattern.hasMatch(address)) {
       _address.clear();
       address = '';
+      _clearClipboard();
     }
     // Longer than a view key: a seed phrase whose line breaks the field ate.
     if (viewKey.contains(_whitespace) || viewKey.length > 64) {
       _viewKey.clear();
       viewKey = '';
+      _clearClipboard();
     }
     _matches = null;
     if (address.isNotEmpty &&
@@ -160,8 +196,11 @@ class _SetupScreenState extends State<SetupScreen> {
       } else {
         _matches = problem == null;
         // A key that isn't this address's view key may be the spend key:
-        // don't leave it in the field.
-        if (problem != null) _viewKey.clear();
+        // don't leave it in the field, or on the clipboard.
+        if (problem != null) {
+          _viewKey.clear();
+          _clearClipboard();
+        }
       }
     }
     if (_address.text.isEmpty) _addressFromQr = false;
@@ -185,6 +224,7 @@ class _SetupScreenState extends State<SetupScreen> {
     // From here the key exists only inside the wallet library's memory and in
     // the wallet's encrypted keys file.
     _viewKey.clear();
+    _clearClipboard();
     setState(() {
       _matches = null;
       _addressFromQr = false;
@@ -303,6 +343,7 @@ class _SetupScreenState extends State<SetupScreen> {
                 key: const Key('address'),
                 controller: _address,
                 onChanged: _typedAddress,
+                inputFormatters: [_notePaste],
                 minLines: 2,
                 maxLines: 3,
                 autocorrect: false,
@@ -324,6 +365,7 @@ class _SetupScreenState extends State<SetupScreen> {
                 key: const Key('viewKey'),
                 controller: _viewKey,
                 onChanged: _typedViewKey,
+                inputFormatters: [_notePaste],
                 obscureText: true,
                 autocorrect: false,
                 enableSuggestions: false,
@@ -353,6 +395,11 @@ class _SetupScreenState extends State<SetupScreen> {
                 inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                 style: mono(),
               ),
+              if (_heightTooHigh)
+                const _Problem(
+                  "That's after the newest block. Use the GUI's restore "
+                  'height.',
+                ),
               Padding(
                 padding: const EdgeInsets.only(top: 8),
                 child: Text(
@@ -370,7 +417,7 @@ class _SetupScreenState extends State<SetupScreen> {
             children: [
               Icon(Icons.lock_outline, color: c.muted),
               const SizedBox(width: 12),
-              Expanded(child: Text(_neverEnterSeed, style: context.body)),
+              Expanded(child: Text(neverEnterSeed, style: context.body)),
             ],
           ),
         ),

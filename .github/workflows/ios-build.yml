@@ -201,7 +201,10 @@ jobs:
       # - Give the app its real bundle id (now the com.example placeholder in
       #   ios/Runner.xcodeproj) and register it in the developer account.
       # - Keep the signing certificate, the provisioning profile and an App
-      #   Store Connect API key without the Admin role as repository secrets.
+      #   Store Connect API key without the Admin role as secrets of a GitHub
+      #   environment that only main can use (Settings > Environments,
+      #   deployment branches: main). Repository secrets would reach a run
+      #   started by hand on any branch, with that branch's copy of this file.
       # - Do the signed build and the TestFlight upload in a separate job that
       #   runs only by hand, never for pull requests, so pull request code
       #   never sees those secrets.

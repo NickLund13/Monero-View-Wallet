@@ -145,7 +145,7 @@ Future<String?> _keyProblem(
 
 /// ViewWallet.keysProblem off the UI isolate: the wallet it checks with takes
 /// a third of a second to make, which would stall the screen. That wallet is
-/// in memory only and dropped on the helper isolate.
+/// in memory only and freed on the helper isolate before it ends.
 Future<String?> _keysProblemOffUi({
   required String address,
   required String viewKey,

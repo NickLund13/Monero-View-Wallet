@@ -26,6 +26,8 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   addBundledLicenses();
   final folder = keepOnDevice();
+  // Before the price lookup starts again: opening the wallet sets torProxy,
+  // so with Tor on even the first price request goes through Tor.
   final wallet = ViewWallet.openSaved();
   if (folder != null) {
     keepShowUsd(
@@ -58,7 +60,10 @@ Future<void> main() async {
 // only. It needs a SecretStore on the Keystore first.
 String? keepOnDevice() {
   if (Platform.isWindows) {
-    final folder = '${Platform.environment['LOCALAPPDATA']}\\MoneroViewWallet';
+    // Without it the files would land wherever the app was started from.
+    final local = Platform.environment['LOCALAPPDATA'] ?? '';
+    if (local.isEmpty) return null;
+    final folder = '$local\\MoneroViewWallet';
     walletFile = '$folder\\wallet';
     keepAppearance(File('$folder\\appearance'));
     // tor.exe sits next to the app (windows/CMakeLists.txt puts it there).
@@ -75,7 +80,8 @@ String? keepOnDevice() {
   // Out of iCloud and computer backups: the wallet's password never leaves
   // this iPhone, so a backup of the files could never be opened. The same for
   // wallet2's ring database (see the README), if iOS lets it be made.
-  for (final keep in [folder, '$home/.shared-ringdb']) {
+  final rings = ringDatabase = '$home/.shared-ringdb';
+  for (final keep in [folder, rings]) {
     try {
       Directory(keep).createSync(recursive: true);
       excludeFromBackup(keep);
