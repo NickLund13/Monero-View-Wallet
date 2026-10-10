@@ -99,7 +99,7 @@ This policy is about the iPhone app. A Windows build exists only for testing and
 
 ## The Android test build
 
-An Android build exists only for testing and is not distributed yet. It connects to the same places in the same way, except that it has no Tor yet, and it has no camera, key images file import or lock yet. It keeps the wallet's files, the display choices and the ring database in the app's own storage, which other apps can't read, and Android neither backs that storage up nor moves it to a new phone. The wallet's password is kept there too, encrypted with a key that Android's Keystore makes and keeps, and that can't be read out of the phone. Deleting the app deletes all of it, that key included.
+An Android build exists only for testing and is not distributed yet. It connects to the same places in the same way, except that it has no Tor or camera yet. It keeps the wallet's files, the display choices and the ring database in the app's own storage, which other apps can't read, and Android neither backs that storage up nor moves it to a new phone. The wallet's password is kept there too, encrypted with a key that Android's Keystore makes and keeps, and that can't be read out of the phone. A key images file you hand the app is copied into that storage only until it is imported, as on the iPhone. Deleting the app deletes all of it, that key included. The lock uses the phone's fingerprint, face or screen lock, which Android checks: the app only learns whether the check passed. Android's Recents screen never shows a picture of the app.
 
 ## Changes to this policy
 

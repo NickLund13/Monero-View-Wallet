@@ -7,8 +7,9 @@
 # - The wallet library is in the app for each kind of processor.
 # - Its native libraries work on phones with 16 KB memory pages, which Google
 #   Play asks of every app: aligned so in the APK and in their own headers.
-# - The app asks for no permission but the internet, and Android may not back
-#   it up or move its files to a new phone.
+# - The app asks for no permission but the internet and the lock's fingerprint
+#   or face check, and Android may not back it up or move its files to a new
+#   phone.
 set -eu
 
 apk=$1
@@ -51,6 +52,7 @@ echo "$permissions"
 for permission in $permissions; do
   case "$permission" in
     android.permission.INTERNET) ;;
+    android.permission.USE_BIOMETRIC) ;;
     com.example.monero_view_wallet.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION) ;;
     *)
       echo "::error::The app asks for $permission."

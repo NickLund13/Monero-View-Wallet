@@ -64,7 +64,7 @@ Future<void> main() async {
 /// sheet.
 Future<String> _lock() async {
   try {
-    const check = IosOwnerCheck();
+    const check = PhoneOwnerCheck();
     const wait = Duration(seconds: 20);
     await AppLock().uncover().timeout(wait);
     final kind = await check.kind().timeout(wait);
@@ -96,7 +96,7 @@ Future<String> _faceId() async {
     var kind = Unlock.none;
     for (var i = 0; i < 60 && kind != Unlock.faceId; i++) {
       await Future<void>.delayed(const Duration(seconds: 1));
-      kind = await const IosOwnerCheck().kind();
+      kind = await const PhoneOwnerCheck().kind();
     }
     return kind == Unlock.faceId ? 'ok' : 'still ${kind.name}';
   } catch (e) {

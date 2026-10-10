@@ -23,7 +23,7 @@ import 'ui.dart';
 import 'wallet.dart';
 
 Future<void> main() async {
-  // The lock asks the iPhone what it unlocks with before the first frame.
+  // The lock asks the phone what it unlocks with before the first frame.
   WidgetsFlutterBinding.ensureInitialized();
   addBundledLicenses();
   final folder = await keepOnDevice();
@@ -51,7 +51,7 @@ Future<void> main() async {
     ),
   );
   // Key images files opened with the app go to Import key images.
-  if (Platform.isIOS) receiveKeyImagesFiles();
+  if (Platform.isIOS || Platform.isAndroid) receiveKeyImagesFiles();
 }
 
 /// Points the app at this device's folder and secure storage, so the wallet
