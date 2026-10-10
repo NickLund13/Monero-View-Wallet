@@ -922,19 +922,21 @@ class ViewWallet {
   int _holds = 0;
 
   /// Lets wallet2's sync thread run once the wallet has a node, unless a call
-  /// needs it out of the way or the wallet waits for Tor. Paused for Tor, a
-  /// scan it is in the middle of also stops, before its next request.
+  /// needs it out of the way or the wallet waits for Tor. While it waits for
+  /// Tor, a scan in progress also stops before its next request, the sync
+  /// thread's or that of a call already holding it (an import or a rescan).
   void _sync() {
     if (_closing != null || _node == null) return;
     final run = _holds == 0 && !_waitingForTor;
-    if (run == _syncing) return;
-    _syncing = run;
-    if (run) {
-      _wallet.startRefresh();
-    } else {
-      _wallet.pauseRefresh();
-      if (_waitingForTor) _wallet.stop();
+    if (run != _syncing) {
+      _syncing = run;
+      if (run) {
+        _wallet.startRefresh();
+      } else {
+        _wallet.pauseRefresh();
+      }
     }
+    if (_waitingForTor) _wallet.stop();
   }
 
   /// [_inTurn] with the sync thread paused until [call] is done. [call] is
