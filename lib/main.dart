@@ -7,6 +7,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import 'android_keystore.dart';
 import 'home_screen.dart';
 import 'keychain.dart';
 import 'licenses.dart';
@@ -25,7 +26,7 @@ Future<void> main() async {
   // The lock asks the iPhone what it unlocks with before the first frame.
   WidgetsFlutterBinding.ensureInitialized();
   addBundledLicenses();
-  final folder = keepOnDevice();
+  final folder = await keepOnDevice();
   // Before the price lookup starts again: opening the wallet sets torProxy,
   // so with Tor on even the first price request goes through Tor.
   final wallet = ViewWallet.openSaved();
@@ -56,9 +57,8 @@ Future<void> main() async {
 /// Points the app at this device's folder and secure storage, so the wallet
 /// and the Appearance choice are kept between launches. Returns the folder,
 /// or null where nothing is kept.
-// ponytail: Android saves nothing yet, so there the wallet lives in memory
-// only. It needs a SecretStore on the Keystore first.
-String? keepOnDevice() {
+Future<String?> keepOnDevice() async {
+  if (Platform.isAndroid) return _keepOnAndroid();
   if (Platform.isWindows) {
     // Without it the files would land wherever the app was started from.
     final local = Platform.environment['LOCALAPPDATA'] ?? '';
@@ -98,6 +98,21 @@ String? keepOnDevice() {
   // up and which iOS may clear: Tor then fetches it again.
   torInApp = true;
   torFolder = '$home/Library/Caches/tor';
+  return folder;
+}
+
+/// On Android: the app's own folder that Android never backs up, nor moves to
+/// a new phone (android/app/src/main/AndroidManifest.xml). The Runner sets it
+/// as HOME (MainActivity.kt), so wallet2 keeps its ring database in it too.
+/// The password is in the Keystore.
+Future<String?> _keepOnAndroid() async {
+  final home = Platform.environment['HOME'] ?? '';
+  if (home.isEmpty || home == '/') return null;
+  secretStore = await AndroidKeystore.open();
+  final folder = '$home/MoneroViewWallet';
+  ringDatabase = '$home/.shared-ringdb';
+  walletFile = '$folder/wallet';
+  keepAppearance(File('$folder/appearance'));
   return folder;
 }
 

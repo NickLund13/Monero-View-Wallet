@@ -2,7 +2,8 @@
 /// iPhone the Files picker and files opened with the app from Files, the share
 /// sheet or AirDrop (ios/Runner/KeyImagesFile.swift is the other end).
 // ponytail: on Windows the dialog is its own window rather than a child of the
-// app's. Android has no way to choose the file yet.
+// app's. Android has no way to choose the file yet: there the picker answers
+// as if cancelled.
 library;
 
 import 'dart:ffi';
@@ -55,6 +56,8 @@ class KeyImagesFile {
 /// A variable so a test can stand in for the dialog.
 Future<KeyImagesFile?> Function() pickKeyImagesFile = Platform.isIOS
     ? _pickOnIPhone
+    : Platform.isAndroid
+    ? () async => null
     : () async {
         final path = await Isolate.run(_openDialog);
         return path == null ? null : KeyImagesFile(path);

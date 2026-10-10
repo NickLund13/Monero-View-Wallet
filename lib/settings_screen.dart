@@ -382,6 +382,8 @@ class LockSwitch extends StatelessWidget {
             'background.';
       } else if (Platform.isIOS) {
         caption = 'Needs a passcode on this iPhone. Set one in its Settings.';
+      } else if (Platform.isAndroid) {
+        caption = "Not on Android yet. This build doesn't lock.";
       } else {
         caption = "iPhone only. This test build doesn't lock.";
       }
