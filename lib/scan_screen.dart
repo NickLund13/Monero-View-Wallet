@@ -45,8 +45,21 @@ class IosQrCamera implements QrCamera {
   /// Where each camera view on screen hands its code, by platform view id.
   final _onCode = <int, ValueChanged<String>>{};
 
-  /// A code read before its view's id was known here.
+  /// Camera views on screen whose id isn't known here yet.
+  var _waiting = 0;
+
+  /// A code read before its view's id was known here. Kept only while a view
+  /// is waiting for its id, so a code no view will take, a refused one
+  /// included, isn't held in memory.
   final _early = <int, String>{};
+
+  /// How many codes are held for views: for tests.
+  @visibleForTesting
+  int get heldCodes => _early.length;
+
+  void _doneWaiting() {
+    if (--_waiting == 0) _early.clear();
+  }
 
   Future<void> _handle(MethodCall call) async {
     if (call.method != 'code') return;
@@ -56,7 +69,7 @@ class IosQrCamera implements QrCamera {
     final onCode = _onCode.remove(view);
     if (onCode != null) {
       onCode(text);
-    } else {
+    } else if (_waiting > 0) {
       _early[view] = text;
     }
   }
@@ -90,9 +103,16 @@ class _IosCameraView extends StatefulWidget {
 class _IosCameraViewState extends State<_IosCameraView> {
   int? _id;
 
+  @override
+  void initState() {
+    super.initState();
+    widget.camera._waiting++;
+  }
+
   void _created(int id) {
-    _id = id;
     final early = widget.camera._early.remove(id);
+    if (_id == null) widget.camera._doneWaiting();
+    _id = id;
     if (early != null) {
       widget.onCode(early);
     } else {
@@ -103,9 +123,10 @@ class _IosCameraViewState extends State<_IosCameraView> {
   @override
   void dispose() {
     final id = _id;
-    if (id != null) {
+    if (id == null) {
+      widget.camera._doneWaiting();
+    } else {
       widget.camera._onCode.remove(id);
-      widget.camera._early.remove(id);
       // The camera goes off now, not whenever iOS lets go of the view.
       IosQrCamera.channel.invokeMethod('stop', id);
     }

@@ -7,6 +7,7 @@
 // view key check. The screen tests use random throwaway wallets made when the
 // test runs, whose keys are never printed or written into this file.
 
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -548,19 +549,6 @@ void main() {
         asked.add(call);
         return call.method == 'allowed' ? true : null;
       });
-      final views = <int>[];
-      messenger.setMockMethodCallHandler(SystemChannels.platform_views, (
-        call,
-      ) async {
-        if (call.method == 'create') {
-          views.add((call.arguments as Map<Object?, Object?>)['id']! as int);
-        }
-        return null;
-      });
-      addTearDown(() {
-        messenger.setMockMethodCallHandler(IosQrCamera.channel, null);
-        messenger.setMockMethodCallHandler(SystemChannels.platform_views, null);
-      });
       Future<void> read(int view, String text) =>
           messenger.handlePlatformMessage(
             IosQrCamera.channel.name,
@@ -569,8 +557,31 @@ void main() {
             ),
             (_) {},
           );
-      qrCamera = IosQrCamera();
+      final views = <int>[];
+      // What the "Runner" does while it makes a view, before the app hears
+      // that the view exists.
+      Future<void> Function(int view)? making;
+      messenger.setMockMethodCallHandler(SystemChannels.platform_views, (
+        call,
+      ) async {
+        if (call.method == 'create') {
+          final view = (call.arguments as Map<Object?, Object?>)['id']! as int;
+          views.add(view);
+          await making?.call(view);
+        }
+        return null;
+      });
+      addTearDown(() {
+        messenger.setMockMethodCallHandler(IosQrCamera.channel, null);
+        messenger.setMockMethodCallHandler(SystemChannels.platform_views, null);
+      });
+      final camera = IosQrCamera();
+      qrCamera = camera;
       addTearDown(() => qrCamera = null);
+      final spendCode = gui(
+        mainnet,
+        query: 'view_key=$zeros&height=1&spend_key=$zeros',
+      );
 
       await phone(tester);
       await tester.pumpWidget(const MainApp());
@@ -588,14 +599,20 @@ void main() {
         asked.where((call) => call.method == 'stop').map((c) => c.arguments),
         [views.first],
       );
+      // A code the view read as it went is dropped, not kept in memory.
+      await read(views.first, spendCode);
+      await tester.pump();
+      expect(camera.heldCodes, 0);
+      expect(find.text('Not a wallet code'), findsOne);
 
       // A code the next view reads before the app hears it was made is kept
       // for it.
+      making = (view) => read(view, guiCode(full));
       await tester.tap(find.text('Scan again'));
-      await read(views.first + 1, guiCode(full));
       await tester.pump();
       await settleCheck(tester);
       expect(views, [views.first, views.first + 1]);
+      expect(camera.heldCodes, 0);
       expect(find.text('Watch a wallet'), findsOne);
       expect(textIn(tester, address), full.address());
       expect(find.text('Filled from QR code'), findsOne);
@@ -603,6 +620,25 @@ void main() {
         asked.where((call) => call.method == 'stop').map((c) => c.arguments),
         [views.first, views.first + 1],
       );
+
+      // A code read for a view that is taken away before the app hears it
+      // was made is dropped when it goes.
+      final made = Completer<void>();
+      making = (view) async {
+        await read(view, spendCode);
+        await made.future;
+      };
+      await tester.tap(find.text('Scan QR code'));
+      await tester.pumpAndSettle();
+      expect(views, hasLength(3));
+      expect(camera.heldCodes, 1);
+      await tester.tap(find.text('Back'));
+      await tester.pumpAndSettle();
+      expect(camera.heldCodes, 0);
+      made.complete();
+      await tester.pump();
+      expect(find.text('Watch a wallet'), findsOne);
+      expect(textIn(tester, address), full.address());
     });
 
     testWidgets('says when the camera is off, and goes back to typing', (
