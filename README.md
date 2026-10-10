@@ -359,7 +359,9 @@ flutter run                         # on a phone or the emulator; or flutter bui
 Gradle checks each file it downloads against the checksums in
 `android/gradle/verification-metadata.xml`. After Flutter or a build tool
 changes, start the Android build workflow by hand with "Write the Gradle
-checksums" on, check what it prints and commit it.
+checksums" on, check what it prints and commit it. The dependency scan reads
+that file too. `android/gradle/osv-scanner.toml` leaves out the build tools in
+it that never reach the app, and says why.
 
 ### What the app keeps on Android
 

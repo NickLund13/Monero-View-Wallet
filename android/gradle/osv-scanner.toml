@@ -1,0 +1,61 @@
+# For osv-scanner (the dependency scan in .github/workflows/security.yml),
+# for verification-metadata.xml next to this file only.
+#
+# That file lists everything Gradle downloads to build the Android app: the
+# build tools (the Android Gradle Plugin, the Kotlin Gradle plugin and what
+# they use) as well as the libraries that end up in the app. The packages
+# below are build tools only. They run on the build machine, on the app's own
+# code and the Android SDK, and none of them is in the app:
+# docs/third-party-code.md lists what is, from the release build's runtime
+# classpath. Their versions are the ones the Android Gradle Plugin and the
+# Kotlin Gradle plugin that Flutter's template pins (android/settings.gradle.kts)
+# depend on, not this project's choice.
+#
+# Every other package in the file, the app's own libraries among them, is
+# still checked. Check this list again when Flutter or the build tools change:
+# a package in it must never be one the app ships.
+
+[[PackageOverrides]]
+name = 'io\.netty:.*'
+nameIsRegex = true
+ecosystem = "Maven"
+vulnerability.ignore = true
+reason = "Build tool only: comes with the Android or Kotlin Gradle plugin, not in the app."
+
+[[PackageOverrides]]
+name = 'org\.bouncycastle:.*'
+nameIsRegex = true
+ecosystem = "Maven"
+vulnerability.ignore = true
+reason = "Build tool only: comes with the Android or Kotlin Gradle plugin, not in the app."
+
+[[PackageOverrides]]
+name = 'org\.apache\.commons:(commons-compress|commons-lang3)'
+nameIsRegex = true
+ecosystem = "Maven"
+vulnerability.ignore = true
+reason = "Build tool only: comes with the Android or Kotlin Gradle plugin, not in the app."
+
+[[PackageOverrides]]
+name = "org.apache.httpcomponents:httpclient"
+ecosystem = "Maven"
+vulnerability.ignore = true
+reason = "Build tool only: comes with the Android or Kotlin Gradle plugin, not in the app."
+
+[[PackageOverrides]]
+name = "org.bitbucket.b_c:jose4j"
+ecosystem = "Maven"
+vulnerability.ignore = true
+reason = "Build tool only: comes with the Android or Kotlin Gradle plugin, not in the app."
+
+[[PackageOverrides]]
+name = "org.jdom:jdom2"
+ecosystem = "Maven"
+vulnerability.ignore = true
+reason = "Build tool only: comes with the Android or Kotlin Gradle plugin, not in the app."
+
+[[PackageOverrides]]
+name = "org.jetbrains.kotlin:kotlin-gradle-plugin"
+ecosystem = "Maven"
+vulnerability.ignore = true
+reason = "Build tool only: the Kotlin Gradle plugin, which compiles the app's Kotlin code and isn't in the app."
