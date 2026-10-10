@@ -66,7 +66,7 @@ String _walletLibrary() {
 String _folder(String? folder) {
   final home = Platform.environment['HOME'];
   if (home == null || folder == null) return 'not set';
-  if (!home.endsWith('/no_backup')) return 'unexpected: not the no_backup folder';
+  if (!home.endsWith('/no_backup')) return 'unexpected: not no_backup';
   if (folder != '$home/MoneroViewWallet') return 'unexpected: elsewhere';
   return ringDatabase == '$home/.shared-ringdb' ? 'ok' : 'unexpected: rings';
 }

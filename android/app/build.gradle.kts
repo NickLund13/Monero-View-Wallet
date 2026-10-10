@@ -18,9 +18,9 @@ android {
         // A placeholder, like the iPhone build's bundle id: it becomes the
         // app's real id once the app is registered on Google Play.
         applicationId = "com.example.monero_view_wallet"
-        // Android 11: the oldest that still lets the lock ask for the
-        // fingerprint, face or screen lock with Android's own
-        // BiometricPrompt, without a support library.
+        // Android 11: the first whose own BiometricPrompt can ask for the
+        // fingerprint or face and fall back to the screen lock
+        // (setAllowedAuthenticators), so the lock needs no support library.
         minSdk = 30
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode

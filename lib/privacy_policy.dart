@@ -97,6 +97,10 @@ Apple runs the App Store, Face ID, the Keychain, the share sheet and iCloud unde
 
 This policy is about the iPhone app. A Windows build exists only for testing and is not distributed. It connects to the same places in the same way, with these differences: it keeps the wallet's files in the Windows user's AppData folder, and the password in Windows Credential Manager, where other programs running as the same Windows user can read it. It also uses the ring database the Monero GUI shares, in the .shared-ringdb folder in C:\ProgramData, which other accounts on the computer can usually read and which Remove wallet doesn't clear.
 
+## The Android test build
+
+An Android build exists only for testing and is not distributed yet. It connects to the same places in the same way, except that it has no Tor yet, and it has no camera, key images file import or lock yet. It keeps the wallet's files, the display choices and the ring database in the app's own storage, which other apps can't read, and Android neither backs that storage up nor moves it to a new phone. The wallet's password is kept there too, encrypted with a key that Android's Keystore makes and keeps, and that can't be read out of the phone. Deleting the app deletes all of it, that key included.
+
 ## Changes to this policy
 
 If the app starts to keep or send anything new, this policy changes in the same app update, and the date at the top changes with it.
