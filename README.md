@@ -35,8 +35,10 @@ wallet:
 3. **Scanning the blockchain:** progress of the first sync.
 4. **Import key images:** choose the file the Monero GUI exported. On an
    iPhone, choose it in the Files picker, or open it with this app from Files,
-   the share sheet or AirDrop; the app then shows the file and imports it when
-   you tap Import this file. On a phone, **Use QR codes** works with a
+   the share sheet or AirDrop; on Android, choose it in Android's file picker,
+   or open it with this app or share it to this app from Files, a cloud drive
+   or email. The app then shows the file and imports it when you tap Import
+   this file. On a phone, **Use QR codes** works with a
    signing device that uses Monero's animated QR codes (Passport with Cake
    Signer, Feather's offline signing): the app shows the wallet's outputs as
    an animated code for the device to read, then reads the key images code it
@@ -56,7 +58,8 @@ wallet:
 7. **Settings** (gear on Home): the node and how fast it answers, whether
    Test speed asks every node (on by default), the restore height, Appearance
    (System, which follows the computer or phone, Light or Dark), Show USD
-   value, Face ID to open (iPhone only, see [the lock](#the-lock)), Privacy
+   value, Face ID to open (on Android Fingerprint to open or Screen lock to
+   open; see [the lock](#the-lock)), Privacy
    policy, Open-source licenses and Remove wallet from this device. Show USD
    value is off by default; turned on, the app asks Kraken for the XMR price (the
    mainnet price, also shown for a stagenet wallet, whose coins are worth
@@ -282,6 +285,22 @@ Face ID itself, a face on the Face ID sheet, isn't tried yet: the simulator
 test only checks that the lock offers Face ID once a face is enrolled. That
 waits for TestFlight and a real iPhone.
 
+On Android the lock works the same way, with Android's own check
+(BiometricPrompt, in `AppLock.kt`): the phone's fingerprint or face starts by
+itself, and **Use screen lock** asks for its PIN, pattern or password instead.
+
+- Only a fingerprint or face that Android counts as strong (Class 3) is
+  offered. On a phone with only a weaker face unlock, the app asks for the
+  screen lock, and Settings calls the lock **Screen lock to open**.
+- A phone with no screen lock can't lock the app, and Settings says so.
+- Recents never shows a picture of the app: on Android 13 and later the app
+  asks Android to leave it out, and on Android 11 and 12, where only a secure
+  window can be left out, the app's window is a secure one, which also keeps
+  it out of screenshots there. The app also covers itself once it is out of
+  sight, until it has drawn itself again on coming back.
+- The emulator test enters a made-up PIN in Android's prompt. A fingerprint or
+  face waits for a real phone.
+
 ### What the app keeps on an iPhone
 
 The same as on Windows, but in places no other app can read:
@@ -336,27 +355,32 @@ flutter run                 # on a simulator; or flutter build ios --simulator
 ## Building for Android
 
 The app builds for Android 11 and later, so far only as a test build: it
-isn't on Google Play, and it has no key images file import or lock yet.
-Those follow the iPhone's. The Android build workflow (Actions > Android
-build) builds it on a GitHub Linux runner, signed only with a throwaway debug
-key, and checks the result:
+isn't on Google Play yet. Tor, the camera, key images files and
+[the lock](#the-lock) work as on the iPhone. The Android build workflow
+(Actions > Android build) builds it on a GitHub Linux runner, signed only
+with a throwaway debug key, and checks the result:
 
 - The wallet library and Tor are in the app for 64-bit and 32-bit ARM phones
   and for the emulator, and the app's native libraries work on phones with
   16 KB memory pages, as Google Play asks. Android unpacks them when the app
   is installed, so that it can run Tor.
-- The app asks for no permission but the internet and the camera, the camera
-  is optional, so phones without one can install it, and Android may neither
-  back it up nor move its files to a new phone.
+- The app asks for no permission but the internet, the camera and the lock's
+  fingerprint or face check, the camera is optional, so phones without one
+  can install it, and Android may neither back it up nor move its files to a
+  new phone.
 - A smoke test on the emulator, on Android 11 and Android 15, both without
   Google's apps or services: the wallet library loads and runs, a throwaway
   wallet is saved with its password under the Keystore, opens again after the
   Keystore is read afresh, as at the next launch, and is removed. Tor runs and
-  is the version `tool/fetch_tor.sh` pins. The camera's native code answers,
-  and once the camera is allowed, Scan QR code turns the emulator's camera on
-  and turns it off again when it closes. The app shows its first screen, and
+  is the version `tool/fetch_tor.sh` pins. The app's code for key images
+  files, the lock and the camera answers. The app shows its first screen, and
   keeps running without starting afresh when Android makes its activity anew,
-  as it does after a theme change.
+  as it does after a theme change. On Android 11 its window is a secure one,
+  kept out of Recents. With a made-up PIN set as the emulator's screen lock,
+  the lock asks for it in Android's own prompt, and the PIN entered there
+  unlocks it. Once the camera is allowed, Scan QR code turns the emulator's
+  camera on and turns it off again when it closes. Started again, the app
+  deletes the copy of a key images file it left behind.
 
 It runs by itself on pull requests that are ready for review and after a push
 to main, when they change the Android project, the app's code, the wallet
@@ -401,6 +425,20 @@ read:
   the home folder, which the app sets to `no_backup` (`MainActivity.kt`).
 - **Tor's own files**, once you have used Connect over Tor, in `no_backup/tor`:
   what Tor knows about the Tor network and the entry relays it picked.
+- **A key images file you hand the app**, only until it is imported. Whether
+  you choose it in Android's file picker or open it with the app or share it
+  to the app, Android hands the app only a link to it. The app reads the file
+  once, into `no_backup/KeyImages`, and deletes that copy as on the iPhone:
+  once the import is done or set aside, at once without a wallet, and at the
+  next launch if one is left behind. It reads no more than a key images file
+  can hold, so a bigger file can't fill the phone, and only links another app
+  shares, never a file path. The file stays where it was.
+
+Android offers this app in "Open with" and the share sheet for files it only
+knows as bytes (`application/octet-stream`), as it knows the GUI's file,
+which has no extension. Any other file can still be chosen in the app's file
+picker. The app only becomes the one that opens such files if you tell
+Android to use it always.
 
 Remove wallet deletes the password, then both files, and empties the ring
 database. Deleting the app deletes all of it, the Keystore's key included.

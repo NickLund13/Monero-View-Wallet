@@ -356,9 +356,10 @@ class SpeedTestSwitch extends StatelessWidget {
   );
 }
 
-/// Face ID to open: the lock (lock.dart). Turning it off asks Face ID or the
-/// passcode first, so someone handed the unlocked app can't switch it off for
-/// later.
+/// Face ID to open, or on Android Fingerprint to open: the lock (lock.dart).
+/// Turning it off asks Face ID or the passcode first (on Android the
+/// fingerprint, face or screen lock), so someone handed the unlocked app can't
+/// switch it off for later.
 class LockSwitch extends StatelessWidget {
   const LockSwitch(this.session, {super.key});
 
@@ -380,12 +381,12 @@ class LockSwitch extends StatelessWidget {
         caption =
             'Locks when the app opens and after 1 minute in the '
             'background.';
+      } else if (kind == Unlock.noScreenLock) {
+        caption = 'Needs a screen lock on this phone. Set one in its Settings.';
       } else if (Platform.isIOS) {
         caption = 'Needs a passcode on this iPhone. Set one in its Settings.';
-      } else if (Platform.isAndroid) {
-        caption = "Not on Android yet. This build doesn't lock.";
       } else {
-        caption = "iPhone only. This test build doesn't lock.";
+        caption = "iPhone and Android only. This test build doesn't lock.";
       }
       return SwitchRow(
         title: '${kind.label} to open',

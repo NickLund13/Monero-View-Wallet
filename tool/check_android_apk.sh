@@ -9,9 +9,9 @@
 # - Its native libraries work on phones with 16 KB memory pages, which Google
 #   Play asks of every app: aligned so in their own headers, and in the APK
 #   for any stored uncompressed.
-# - The app asks for no permission but the internet and the camera, needs no
-#   camera to be installed, and Android may not back it up or move its files
-#   to a new phone.
+# - The app asks for no permission but the internet, the camera and the lock's
+#   fingerprint or face check, needs no camera to be installed, and Android
+#   may not back it up or move its files to a new phone.
 set -eu
 
 apk=$1
@@ -45,9 +45,10 @@ for lib in "$libs"/lib/*/*.so; do
 done
 rm -rf "$libs"
 
-# The permissions the app asks for: the internet, and the camera for scanning
-# QR codes. Android's support library adds one of its own, which only this
-# app holds, so that its broadcasts stay inside the app.
+# The permissions the app asks for: the internet, the lock's fingerprint or
+# face check, and the camera for scanning QR codes. Android's support library
+# adds one of its own, which only this app holds, so that its broadcasts stay
+# inside the app.
 permissions=$("$tools/aapt2" dump permissions "$apk" |
   sed -n "s/^uses-permission: name='\([^']*\)'.*/\1/p" | sort)
 echo "Permissions:"
@@ -55,6 +56,7 @@ echo "$permissions"
 for permission in $permissions; do
   case "$permission" in
     android.permission.INTERNET) ;;
+    android.permission.USE_BIOMETRIC) ;;
     android.permission.CAMERA) ;;
     com.example.monero_view_wallet.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION) ;;
     *)

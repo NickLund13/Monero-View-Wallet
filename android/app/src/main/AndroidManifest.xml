@@ -2,6 +2,10 @@
     <!-- For the Monero node, and the opt-in price lookup and Test speed
          (SECURITY.md rule 5), and through the app's own Tor when Tor is on. -->
     <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- For the lock to ask Android to check the fingerprint or face, or the
+         screen lock (AppLock.kt). Android checks them and only tells the app
+         whether the check passed. -->
+    <uses-permission android:name="android.permission.USE_BIOMETRIC"/>
     <!-- For scanning QR codes: the wallet's at setup, and a signing device's
          key images. Asked for when a scan starts; the picture is never
          saved (QrCamera.kt). The app asks for no other permission. -->
@@ -25,7 +29,7 @@
         <activity
             android:name=".MainActivity"
             android:exported="true"
-            android:launchMode="singleTop"
+            android:launchMode="singleTask"
             android:taskAffinity=""
             android:theme="@style/LaunchTheme"
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
@@ -37,9 +41,30 @@
               android:name="io.flutter.embedding.android.NormalTheme"
               android:resource="@style/NormalTheme"
               />
+            <!-- Links opened with the app go nowhere in its screens: a key
+                 images file opened with it (below) goes to Import key images
+                 (KeyImagesFile.kt). -->
+            <meta-data
+              android:name="flutter_deeplinking_enabled"
+              android:value="false"
+              />
             <intent-filter>
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
+            </intent-filter>
+            <!-- A key images file opened with the app, or shared to it, from
+                 Files, a cloud drive or email. The Monero GUI's file has no
+                 extension, so Android only knows it as a file of bytes. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <data android:scheme="content"/>
+                <data android:mimeType="application/octet-stream"/>
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.SEND"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <data android:mimeType="application/octet-stream"/>
             </intent-filter>
         </activity>
         <!-- Used by the Flutter tool to generate GeneratedPluginRegistrant.java. -->

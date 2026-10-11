@@ -9,9 +9,14 @@ set -eu
 
 apk=$1
 package=com.example.monero_view_wallet
+# The emulator's screen lock while the lock is tried: a made-up PIN on a
+# throwaway emulator.
+pin=1234
 
 adb install -r "$apk"
 adb logcat -c
+# The screen stays on, so the emulator doesn't lock itself once it has a PIN.
+adb shell svc power stayon true
 adb shell am start -W -n "$package/.MainActivity"
 
 # The smoke test's report so far, from the emulator's log.
@@ -19,7 +24,7 @@ report() {
   adb logcat -d -s flutter:I | sed -n 's/.*android_smoke: //p'
 }
 
-# Waits up to 3 minutes for the first frame, the smoke test's last line.
+# Waits up to 3 minutes for the first frame.
 for _ in $(seq 90); do
   case "$(report)" in *'first frame:'*) break ;; esac
   sleep 2
@@ -41,6 +46,40 @@ if ! adb shell dumpsys activity activities |
   echo "::error::The app isn't showing after its activity was made anew."
   failed=1
 fi
+
+# Recents never shows a picture of the app. Android 13 and later leave it out
+# when the app asks, which their dumpsys doesn't show; before that the app's
+# window is a secure one. Its flags are on the line after mAttrs=.
+if [ "$(adb shell getprop ro.build.version.sdk | tr -d '\r')" -lt 33 ]; then
+  attributes=$(adb shell dumpsys window windows |
+    grep -A 40 "Window{[^}]*$package/[^}]*MainActivity}" |
+    grep -m 1 -A 3 'mAttrs=' || true)
+  case "$(echo "$attributes" | grep -m 1 ' fl=')" in
+    *SECURE*) ;;
+    *)
+      echo "::error::Recents may show a picture of the app: its window isn't secure."
+      echo "$attributes"
+      failed=1
+      ;;
+  esac
+fi
+
+# The lock with a screen lock: once a PIN is set, the app asks for it with
+# Android's own prompt, and the PIN typed there unlocks it.
+adb shell locksettings set-pin "$pin"
+for _ in $(seq 90); do
+  case "$(report)" in *'screen lock: '*) break ;; esac
+  sleep 2
+done
+for _ in $(seq 10); do
+  sleep 3
+  if report | grep '^screen lock: ' | grep -qv '^screen lock: asking$'; then
+    break
+  fi
+  adb shell input text "$pin"
+  adb shell input keyevent KEYCODE_ENTER
+done
+adb shell locksettings clear --old "$pin" || true
 
 # The camera, allowed now as a person allows it at the first scan: the smoke
 # test then shows Scan wallet QR, and the camera must be on while it shows
@@ -98,12 +137,22 @@ if reported 'camera view: gone'; then
   fi
 fi
 
+# Started again, the app deletes the copy of a key images file the first start
+# left behind. It draws nothing then, so there is no first frame to wait for.
+adb shell am force-stop "$package"
+adb shell am start -n "$package/.MainActivity"
+for _ in $(seq 30); do
+  case "$(report)" in *'copy left behind: '*) break ;; esac
+  sleep 2
+done
+
 report=$(report)
 echo "$report"
 
 expected=$(printf '%s\n' 'wallet library: ok' 'folder: ok' 'keystore: ok' \
-  'saved wallet: ok' 'tor: ok' 'camera: ok' 'first frame: ok' \
-  'camera view: shown' 'camera view: gone')
+  'saved wallet: ok' 'tor: ok' 'key images file: ok' 'lock: ok' 'camera: ok' \
+  'first frame: ok' 'screen lock: asking' 'screen lock: ok' \
+  'camera view: shown' 'camera view: gone' 'copy left behind: ok')
 if [ "$(echo "$report" | grep -v '^file: \|^tor library: ')" != "$expected" ]; then
   echo "::error::The smoke test failed on the Android emulator."
   adb logcat -d -v brief -s flutter:I ActivityTaskManager:I || true

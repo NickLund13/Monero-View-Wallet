@@ -258,9 +258,11 @@ denied).
 code row (`lib/scan_screen.dart`), and the iPhone camera
 (`ios/Runner/QrCamera.swift`): a platform view with a capture session of its
 own, which stops at the first code it reads and is torn down as soon as the
-screen takes the view away. Not yet tried with a real camera, which waits for
-TestFlight. The Windows test build has no camera, so setup there stays
-typed.
+screen takes the view away. The Android camera
+(`android/app/src/main/kotlin/com/example/monero_view_wallet/QrCamera.kt`)
+works the same way, with CameraX and ZXing reading the codes. Not yet tried
+with a real camera, which waits for TestFlight and an Android phone. The
+Windows test build has no camera, so setup there stays typed.
 
 ### 2. Choose a node
 
@@ -494,8 +496,11 @@ first" shows the node's height instead.
   first; turning it on asks nothing. The choice is kept inside the encrypted
   wallet file, not as plain text. On an iPhone with no passcode the switch is
   off and locked, with "Needs a passcode on this iPhone. Set one in its
-  Settings."; the Windows test build shows it the same way with "iPhone only.
-  This test build doesn't lock."
+  Settings."; the Windows test build shows it the same way with "iPhone and
+  Android only. This test build doesn't lock." On Android the name follows
+  the phone too (Fingerprint to open, Face unlock to open, Fingerprint or
+  face to open, Screen lock to open), and a phone with no screen lock shows
+  "Needs a screen lock on this phone. Set one in its Settings."
 - About: Privacy policy → the app's privacy policy, docs/privacy-policy.md
   built into the app (`lib/privacy_policy.dart`): headings, paragraphs and
   bullets in the body style, selectable so its web address can be copied.
@@ -549,6 +554,20 @@ not.
 encrypt anything. The wallet's files are encrypted with a password the
 Keychain only gives out while the iPhone is unlocked. The Windows test build
 has no lock.
+
+**On Android** (built 2026-10-10) the lock is the same, with Android's
+BiometricPrompt as the check. The fingerprint or face, if Android counts it
+as strong (Class 3), starts by itself; its prompt has Cancel, and Use screen
+lock on the screen asks for the PIN, pattern or password (Android may try the
+fingerprint or face once more first). The lines read "Fingerprint", "Face
+unlock" or "Fingerprint or face" for Face ID and "screen lock" for the
+passcode: "Unlock with fingerprint", "Fingerprint is off after too many tries.
+Use your screen lock." Recents never shows a picture of the app: Android 13
+and later leave it out when the app asks, and on Android 11 and 12 the app's
+window is a secure one. The cover goes on once the app is out of sight
+(not while another app's sheet, such as the share sheet, is over it), and
+on a new activity for the app that is already running, and comes off as on
+the iPhone.
 
 ## USD price lookup (recorded decision)
 

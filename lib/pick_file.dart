@@ -1,9 +1,10 @@
-/// Where the key images file comes from: the Windows "Open" dialog, or on an
+/// Where the key images file comes from: the Windows "Open" dialog; on an
 /// iPhone the Files picker and files opened with the app from Files, the share
-/// sheet or AirDrop (ios/Runner/KeyImagesFile.swift is the other end).
+/// sheet or AirDrop (ios/Runner/KeyImagesFile.swift is the other end); on
+/// Android the system's file picker and files opened with the app or shared to
+/// it (KeyImagesFile.kt).
 // ponytail: on Windows the dialog is its own window rather than a child of the
-// app's. Android has no way to choose the file yet: there the picker answers
-// as if cancelled.
+// app's.
 library;
 
 import 'dart:ffi';
@@ -20,7 +21,7 @@ class KeyImagesFile {
 
   final String path;
 
-  /// True for the app's own copy, which iOS made when the file was chosen or
+  /// True for the app's own copy, made on a phone when the file was chosen or
   /// opened with the app, and which [discard] deletes. False for the file the
   /// Windows dialog chose, which stays where it is.
   final bool copy;
@@ -36,7 +37,7 @@ class KeyImagesFile {
     }
   }
 
-  /// Deletes the app's copy, and the folder the iPhone kept it in if that is
+  /// Deletes the app's copy, and the folder the phone kept it in if that is
   /// now empty. The wallet keeps what it imported; the file isn't needed again.
   void discard() {
     if (!copy) return;
@@ -54,10 +55,9 @@ class KeyImagesFile {
 
 /// Asks for the key images file; null if the dialog or picker was cancelled.
 /// A variable so a test can stand in for the dialog.
-Future<KeyImagesFile?> Function() pickKeyImagesFile = Platform.isIOS
-    ? _pickOnIPhone
-    : Platform.isAndroid
-    ? () async => null
+Future<KeyImagesFile?> Function() pickKeyImagesFile =
+    Platform.isIOS || Platform.isAndroid
+    ? _pickOnPhone
     : () async {
         final path = await Isolate.run(_openDialog);
         return path == null ? null : KeyImagesFile(path);
@@ -82,11 +82,11 @@ KeyImagesFile? takeKeyImagesFile() {
   return file;
 }
 
-const _iPhone = MethodChannel('monero_view_wallet/key_images_file');
+const _phone = MethodChannel('monero_view_wallet/key_images_file');
 
-Future<KeyImagesFile?> _pickOnIPhone() async {
+Future<KeyImagesFile?> _pickOnPhone() async {
   try {
-    final path = await _iPhone.invokeMethod<String>('pick');
+    final path = await _phone.invokeMethod<String>('pick');
     return path == null ? null : KeyImagesFile(path, copy: true);
   } on PlatformException {
     // The picker couldn't be shown just now: as if cancelled.
@@ -94,17 +94,17 @@ Future<KeyImagesFile?> _pickOnIPhone() async {
   }
 }
 
-/// On an iPhone, starts taking the files opened with the app, including one
+/// On a phone, starts taking the files opened with the app, including one
 /// that started it.
 Future<void> receiveKeyImagesFiles() async {
-  _iPhone.setMethodCallHandler((call) async {
+  _phone.setMethodCallHandler((call) async {
     if (call.method == 'received') await _take();
   });
   await _take();
 }
 
 Future<void> _take() async {
-  final paths = await _iPhone.invokeListMethod<String>('take') ?? const [];
+  final paths = await _phone.invokeListMethod<String>('take') ?? const [];
   for (final path in paths) {
     offerKeyImagesFile(KeyImagesFile(path, copy: true));
   }

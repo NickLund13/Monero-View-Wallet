@@ -2978,6 +2978,24 @@ void main() {
       expect(lockSwitch().onChanged, isNull);
       expect(find.textContaining("doesn't lock"), findsOne);
 
+      // An Android phone with no screen lock, and one with a fingerprint.
+      appLock.kind = Unlock.noScreenLock;
+      appLock.on = false;
+      await tester.pump();
+      expect(find.text('Screen lock to open'), findsOne);
+      expect(
+        find.text(
+          'Needs a screen lock on this phone. Set one in its Settings.',
+        ),
+        findsOne,
+      );
+      expect(lockSwitch().onChanged, isNull);
+      appLock.kind = Unlock.fingerprint;
+      appLock.on = true;
+      await tester.pump();
+      expect(find.text('Fingerprint to open'), findsOne);
+      expect(lockSwitch().value, isTrue);
+
       // Taking the screens away closes the wallet.
       await tester.pumpWidget(const SizedBox());
     },

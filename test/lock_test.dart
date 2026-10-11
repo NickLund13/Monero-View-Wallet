@@ -202,6 +202,49 @@ void main() {
     expect(find.text('Use passcode'), findsNothing);
   });
 
+  testWidgets('on Android, says fingerprint, face and screen lock', (
+    tester,
+  ) async {
+    check
+      ..unlock = Unlock.fingerprint
+      ..answers.addAll([CheckResult.lockedOut, CheckResult.unavailable]);
+    await appLock.start(on: true);
+    await showApp(tester);
+    expect(check.asked, [false], reason: 'the fingerprint, once, by itself');
+    expect(
+      find.text(
+        'Fingerprint is off after too many tries. Use your screen lock.',
+      ),
+      findsOne,
+    );
+    expect(find.text('Use screen lock'), findsOne);
+
+    check.unlock = Unlock.fingerprintOrFace;
+    await tester.tap(find.text('Unlock with fingerprint'));
+    await tester.pump();
+    expect(
+      find.text("Fingerprint or face isn't available. Use your screen lock."),
+      findsOne,
+    );
+    expect(find.text('Unlock with fingerprint or face'), findsOne);
+
+    // The fingerprint was removed while the app was away.
+    check.unlock = Unlock.screenLock;
+    await tester.tap(find.text('Use screen lock'));
+    await tester.pump();
+    expect(check.asked, [false, false, true], reason: 'the screen lock');
+    expect(find.text('Unlock with screen lock'), findsOne);
+    expect(find.text('Use screen lock'), findsNothing);
+
+    // The screen lock taken off the phone: nothing left to check with.
+    check.unlock = Unlock.noScreenLock;
+    await tester.tap(find.text('Unlock with screen lock'));
+    await tester.pump();
+    expect(locked(), isFalse);
+    expect(appLock.kind, Unlock.noScreenLock);
+    expect(appLock.canLock, isFalse);
+  });
+
   testWidgets('never locks with the lock off, or where nothing can check', (
     tester,
   ) async {
@@ -214,8 +257,13 @@ void main() {
     expect(locked(), isFalse);
     expect(check.asked, isEmpty);
 
-    // An iPhone with no passcode, and the Windows test build.
-    for (final noCheck in [FakeCheck(Unlock.none), const NoOwnerCheck()]) {
+    // An iPhone with no passcode, an Android phone with no screen lock, and
+    // the Windows test build.
+    for (final noCheck in [
+      FakeCheck(Unlock.none),
+      FakeCheck(Unlock.noScreenLock),
+      const NoOwnerCheck(),
+    ]) {
       appLock = AppLock()..check = noCheck;
       await appLock.start(on: true);
       expect(appLock.locked, isFalse);
