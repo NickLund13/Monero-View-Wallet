@@ -11,6 +11,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -330,6 +331,19 @@ void main() {
       addTearDown(() => tester.binding.setSurfaceSize(null));
     }
 
+    // The camera's platform view, on iPhone and on Android.
+    const phones = TargetPlatformVariant({
+      TargetPlatform.iOS,
+      TargetPlatform.android,
+    });
+    Type platformView() => defaultTargetPlatform == TargetPlatform.android
+        ? AndroidView
+        : UiKitView;
+    // Android answers that it made the view with the id of the texture it
+    // draws in (iOS with nothing).
+    int? androidTexture() =>
+        defaultTargetPlatform == TargetPlatform.android ? 0 : null;
+
     // The view key check runs on a helper isolate, which the fake clock of a
     // widget test doesn't wait for: let it finish, then settle the screens.
     Future<void> settleCheck(WidgetTester tester) async {
@@ -542,21 +556,21 @@ void main() {
       },
     );
 
-    testWidgets('the iPhone camera hands each view its code, then stops it', (
+    testWidgets('the phone camera hands each view its code, then stops it', (
       tester,
     ) async {
       // The Runner's side of the camera channel and of platform views,
       // played here: the app asks, and the "Runner" sends codes back.
       final messenger = tester.binding.defaultBinaryMessenger;
       final asked = <MethodCall>[];
-      messenger.setMockMethodCallHandler(IosQrCamera.channel, (call) async {
+      messenger.setMockMethodCallHandler(PhoneQrCamera.channel, (call) async {
         asked.add(call);
         return call.method == 'allowed' ? true : null;
       });
       Future<void> read(int view, String text) =>
           messenger.handlePlatformMessage(
-            IosQrCamera.channel.name,
-            IosQrCamera.channel.codec.encodeMethodCall(
+            PhoneQrCamera.channel.name,
+            PhoneQrCamera.channel.codec.encodeMethodCall(
               MethodCall('code', {'view': view, 'text': text}),
             ),
             (_) {},
@@ -572,14 +586,15 @@ void main() {
           final view = (call.arguments as Map<Object?, Object?>)['id']! as int;
           views.add(view);
           await making?.call(view);
+          return androidTexture();
         }
         return null;
       });
       addTearDown(() {
-        messenger.setMockMethodCallHandler(IosQrCamera.channel, null);
+        messenger.setMockMethodCallHandler(PhoneQrCamera.channel, null);
         messenger.setMockMethodCallHandler(SystemChannels.platform_views, null);
       });
-      final camera = IosQrCamera();
+      final camera = PhoneQrCamera();
       qrCamera = camera;
       addTearDown(() => qrCamera = null);
       final spendCode = gui(
@@ -598,7 +613,7 @@ void main() {
       await tester.pump();
       expect(find.text('Not a wallet code'), findsOne);
       // The view went with the refusal, and its camera was told to stop.
-      expect(find.byType(UiKitView), findsNothing);
+      expect(find.byType(platformView()), findsNothing);
       expect(
         asked.where((call) => call.method == 'stop').map((c) => c.arguments),
         [views.first],
@@ -643,22 +658,22 @@ void main() {
       await tester.pump();
       expect(find.text('Watch a wallet'), findsOne);
       expect(textIn(tester, address), full.address());
-    });
+    }, variant: phones);
 
     testWidgets(
-      'the iPhone camera hands over an animated code part by part, and keeps '
+      'the phone camera hands over an animated code part by part, and keeps '
       'the screen on when asked',
       (tester) async {
         final messenger = tester.binding.defaultBinaryMessenger;
         final asked = <MethodCall>[];
-        messenger.setMockMethodCallHandler(IosQrCamera.channel, (call) async {
+        messenger.setMockMethodCallHandler(PhoneQrCamera.channel, (call) async {
           asked.add(call);
           return null;
         });
         Future<void> read(int view, String text) =>
             messenger.handlePlatformMessage(
-              IosQrCamera.channel.name,
-              IosQrCamera.channel.codec.encodeMethodCall(
+              PhoneQrCamera.channel.name,
+              PhoneQrCamera.channel.codec.encodeMethodCall(
                 MethodCall('code', {'view': view, 'text': text}),
               ),
               (_) {},
@@ -672,17 +687,18 @@ void main() {
             made.add(arguments);
             // The first part comes before the app hears the view was made.
             await read(arguments['id']! as int, 'part 1');
+            return androidTexture();
           }
           return null;
         });
         addTearDown(() {
-          messenger.setMockMethodCallHandler(IosQrCamera.channel, null);
+          messenger.setMockMethodCallHandler(PhoneQrCamera.channel, null);
           messenger.setMockMethodCallHandler(
             SystemChannels.platform_views,
             null,
           );
         });
-        final camera = IosQrCamera();
+        final camera = PhoneQrCamera();
         final parts = <String>[];
 
         await tester.pumpWidget(
@@ -719,6 +735,7 @@ void main() {
           ('stop', view),
         ]);
       },
+      variant: phones,
     );
 
     testWidgets('says when the camera is off, and goes back to typing', (

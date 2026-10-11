@@ -1,7 +1,7 @@
-/// The app's own Tor (experimental): the Tor Project's tor. On Windows it is
-/// the `tor` program, which ships with the app and runs as a separate process
-/// while Tor is on. On iPhone, where an app can't start a program, it is the
-/// same tor built as a library and run inside the app
+/// The app's own Tor (experimental): the Tor Project's tor. On Windows and
+/// Android it is the `tor` program, which ships with the app and runs as a
+/// separate process while Tor is on. On iPhone, where an app can't start a
+/// program, it is the same tor built as a library and run inside the app
 /// (ios/Runner/InAppTor.swift). The wallet library is handed the address of
 /// its SOCKS proxy (wallet.dart); the price lookup connects through it with
 /// [throughTor].
@@ -35,8 +35,12 @@ String torAddress = '127.0.0.1:19050';
 String get _socksPort => '$torAddress IsolateDestAddr';
 
 /// The `tor` program that ships with the app, or null in a build that has
-/// none. main() sets it on Windows.
+/// none. main() sets it on Windows and Android.
 String? torProgram;
+
+/// The environment variable in which the Android Runner (MainActivity.kt)
+/// names the `tor` program that ships with the app.
+const torProgramVariable = 'MONERO_VIEW_TOR';
 
 /// True in the iPhone build, which runs Tor inside the app with
 /// [runTorInApp] instead of [torProgram]. main() sets it.

@@ -258,9 +258,11 @@ denied).
 code row (`lib/scan_screen.dart`), and the iPhone camera
 (`ios/Runner/QrCamera.swift`): a platform view with a capture session of its
 own, which stops at the first code it reads and is torn down as soon as the
-screen takes the view away. Not yet tried with a real camera, which waits for
-TestFlight. The Windows test build has no camera, so setup there stays
-typed.
+screen takes the view away. The Android camera
+(`android/app/src/main/kotlin/com/example/monero_view_wallet/QrCamera.kt`)
+works the same way, with CameraX and ZXing reading the codes. Not yet tried
+with a real camera, which waits for TestFlight and an Android phone. The
+Windows test build has no camera, so setup there stays typed.
 
 ### 2. Choose a node
 
@@ -298,8 +300,8 @@ typed.
   It is on and locked for a .onion node. The caption says it is new and little
   tested, that starting takes up to a minute and that syncing is slower; while
   Tor starts it shows "Connecting to Tor… N%". If Tor can't start, Test, Start
-  sync and Save say so and nothing is contacted. A build without Tor (Android,
-  for now) shows "This build has no Tor yet." and locks the switch.
+  sync and Save say so and nothing is contacted. A build without Tor shows
+  "This build has no Tor yet." and locks the switch.
   Home shows "Connecting to Tor… N%" at launch until Tor is connected.
 - Primary button: Start sync (during setup) or Save (from Settings).
 - The same screen is used in setup and from Settings.
@@ -634,6 +636,15 @@ its limits.
     port. What a real iPhone has to show: iOS takes an app's sockets away
     while it is suspended, so Tor may need its listeners reopened, or a
     restart, when the app comes back.
+- Tor on a real Android phone. The Android build runs the Tor Project's own
+  tor for Android (the Android Tor Expert Bundle 15.0.24, from
+  `tool/fetch_tor.sh android`) as a separate program, as on Windows. It
+  ships as `libtor.so` in the app's native libraries, which Android unpacks
+  at install (`useLegacyPackaging` in `android/app/build.gradle.kts`),
+  because an app may run a program only from there. `MainActivity.kt` tells
+  the app where it is. Tried only on the emulator. What a phone has to show:
+  how Tor fares when Android stops the app in the background, and when the
+  app comes back.
 - Built-in Tor is marked experimental. Before that label comes off: bridges
   for networks that block Tor, a way to see why Tor failed, and more than the
   one nightly test against the real Tor network.
@@ -643,8 +654,9 @@ its limits.
   see [app-store.md](../app-store.md#the-wallet-librarys-lgpl).
 - Key images by QR: try it with a real signing device (Passport with Cake
   Signer, Feather's offline signing) and the iPhone's camera once TestFlight
-  is set up. An Android version needs its own camera code; mobile_scanner uses
-  Google ML Kit there, which the privacy rules rule out.
+  is set up, and with an Android phone's. The Android camera is the app's own
+  (CameraX, with ZXing reading the codes), as mobile_scanner uses Google ML
+  Kit there, which the privacy rules rule out.
 - Confirm by hand that the GUI shows a payment to a subaddress made on the
   phone. The addresses match the GUI's (tested), and New stays inside its
   lookahead.

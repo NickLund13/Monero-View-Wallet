@@ -1,10 +1,11 @@
-The Java and Kotlin libraries that Flutter's Android code uses, in the
-Android build of the app. Each is under the Apache License, Version 2.0,
-which follows their notices.
+The Java and Kotlin libraries in the Android build of the app: the ones
+Flutter's Android code uses, and the camera (AndroidX CameraX) and the QR
+code reader (ZXing) that the app's own camera code uses. Each is under the
+Apache License, Version 2.0, which follows their notices.
 
-AndroidX: activity, annotation, arch core, collection, concurrent futures,
-core, customview, exifinterface, fragment, interpolator, lifecycle, loader,
-profileinstaller, savedstate, startup, tracing, versionedparcelable,
+AndroidX: activity, annotation, arch core, camera, collection, concurrent
+futures, core, customview, exifinterface, fragment, interpolator, lifecycle,
+loader, profileinstaller, savedstate, startup, tracing, versionedparcelable,
 viewpager and window
 Copyright The Android Open Source Project
 
@@ -26,7 +27,17 @@ kotlinx.coroutines
 =========================================================================
 
 kotlinx.coroutines library.
-Copyright 2016-2021 JetBrains s.r.o and respective authors and developers
+Copyright 2016-2024 JetBrains s.r.o and contributors
+
+kotlinx.atomicfu
+   =========================================================================
+   ==  NOTICE file corresponding to the section 4 d of                    ==
+   ==  the Apache License, Version 2.0,                                   ==
+   ==  in this case for the kotlix.atomicfu library.                      ==
+   =========================================================================
+
+   kotlinx.atoimcfu library.
+   Copyright 2017 JetBrains s.r.o and respective authors and developers
 
 JetBrains Java Annotations
 Copyright JetBrains s.r.o.
@@ -39,6 +50,78 @@ Copyright KeepSafe Software, Inc.
 
 JSpecify
 Copyright The JSpecify Authors
+
+Dagger
+Copyright The Dagger Authors
+
+Jakarta Dependency Injection
+# Notices for Eclipse Jakarta Dependency Injection
+
+This content is produced and maintained by the Eclipse Jakarta Dependency Injection project.
+
+* Project home: https://projects.eclipse.org/projects/cdi.batch
+
+## Trademarks
+
+Jakarta Dependency Injection is a trademark of the Eclipse Foundation.
+
+## Copyright
+
+All content is the property of the respective authors or their employers. For
+more information regarding authorship of content, please consult the listed
+source code repository logs.
+
+## Declared Project Licenses
+
+This program and the accompanying materials are made available under the terms
+of the Apache License, Version 2.0 which is available at
+https://www.apache.org/licenses/LICENSE-2.0.
+
+SPDX-License-Identifier: Apache-2.0
+
+## Source Code
+
+The project maintains the following source code repositories:
+
+https://github.com/eclipse-ee4j/injection-api
+https://github.com/eclipse-ee4j/injection-spec
+https://github.com/eclipse-ee4j/injection-tck
+
+## Third-party Content
+
+This project leverages the following third party content.
+
+None
+
+## Cryptography
+
+None
+
+JSR-330 Dependency Injection (javax.inject)
+Copyright The JSR-330 Expert Group
+
+AutoValue annotations
+Copyright Google LLC
+
+ZXing
+Copyright 2007 ZXing authors
+--------------------------------------------------------------------------------
+NOTICES FOR BARCODE4J
+--------------------------------------------------------------------------------
+
+Barcode4J
+Copyright 2002-2010 Jeremias Märki
+Copyright 2005-2006 Dietmar Bürkle
+
+Portions of this software were contributed under section 5 of the
+Apache License. Contributors are listed under:
+http://barcode4j.sourceforge.net/contributors.html
+
+--------------------------------------------------------------------------------
+NOTICES FOR JCOMMANDER
+--------------------------------------------------------------------------------
+
+Copyright 2010 Cedric Beust cedric@beust.com
 
 -------------------------------------------------------------------------
 

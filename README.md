@@ -15,7 +15,7 @@ wallet:
    the address. It refuses and wipes a seed phrase, and any key that is not
    that address's view key (which is what a spend key looks like).
    Subaddresses are refused: watch the primary address.
-   On an iPhone, **Scan QR code** fills all three from the Monero GUI's View
+   On a phone, **Scan QR code** fills all three from the Monero GUI's View
    Only Wallet code (Settings → Wallet → Show seed & keys → Export wallet) or
    Feather's View-Only QR. From other wallets it reads the primary address
    and then the private view key, each from a code of its own; a key on its
@@ -38,7 +38,7 @@ wallet:
    the share sheet or AirDrop; on Android, choose it in Android's file picker,
    or open it with this app or share it to this app from Files, a cloud drive
    or email. The app then shows the file and imports it when you tap Import
-   this file. On an iPhone, **Use QR codes** works with a
+   this file. On a phone, **Use QR codes** works with a
    signing device that uses Monero's animated QR codes (Passport with Cake
    Signer, Feather's offline signing): the app shows the wallet's outputs as
    an animated code for the device to read, then reads the key images code it
@@ -96,6 +96,14 @@ says to close and open it again. Not tried on a real iPhone yet: iOS takes
 network connections away from an app in the background, and only a phone can
 show how Tor recovers when the app comes back.
 
+The Android build ships the Tor Project's own tor for Android (the same tor
+0.4.9.13, from the Android Tor Expert Bundle 15.0.24), one for each kind of
+processor, inside the app as `libtor.so`: Android lets an app run a program
+only from its folder of native libraries. As on Windows, the app runs it as a
+separate program while Tor is on. Not tried on a real phone yet: Android may
+stop an app that is in the background, and Tor with it, and only a phone can
+show how the app picks Tor up again.
+
 - Starting Tor takes from a few seconds to a minute or more, at each launch.
   Home shows "Connecting to Tor…" meanwhile. Syncing over Tor is slower.
 - The node, including a `.onion` node, is reached only through Tor, which also
@@ -105,18 +113,18 @@ show how Tor recovers when the app comes back.
 - While Tor is starting, or if it can't start or connect, the node and Kraken
   can't be reached. The app never falls back to a direct connection.
 - The choice is saved with the node, inside the encrypted wallet file.
-- Tor listens for the app on port 19050 of this computer only, and gives each
+- Tor listens for the app on port 19050 of this device only, and gives each
   host (the node, Kraken, each node Test speed asks) a circuit of its own.
-  Other programs on the computer could use that port too while the app runs.
-  The app sends nothing there until its own Tor has connected and holds the
-  port, so a program that took the port first gets nothing, and Tor fails to
-  start instead. On iPhone Tor also takes commands on a free port it picks
+  Other programs or apps on the device could use that port too while the app
+  runs. The app sends nothing there until its own Tor has connected and holds
+  the port, so a program that took the port first gets nothing, and Tor fails
+  to start instead. On iPhone Tor also takes commands on a free port it picks
   and writes down in its folder, only from someone who shows the cookie Tor
   writes next to it. No other app can read either file.
 - With Tor on, Choose a node lists the onion nodes first. With any other node
   the last Tor relay sits between the app and the node and, as the app can't
   check most nodes' certificates, could read and change the traffic.
-- Your internet provider can see that this computer uses Tor, though not what
+- Your internet provider can see that this device uses Tor, though not what
   for. The app has no bridges, so it won't connect where Tor is blocked.
 - What Tor does not change: a public node still learns which key images belong
   to one wallet when you import them.
@@ -347,37 +355,47 @@ flutter run                 # on a simulator; or flutter build ios --simulator
 ## Building for Android
 
 The app builds for Android 11 and later, so far only as a test build: it
-isn't on Google Play, and it has no Tor or camera yet. Those follow the
-iPhone's. Key images files and [the lock](#the-lock) work as on the iPhone. The Android build workflow (Actions >
-Android build) builds it on a GitHub Linux runner, signed only with a
-throwaway debug key, and checks the result:
+isn't on Google Play yet. Tor, the camera, key images files and
+[the lock](#the-lock) work as on the iPhone. The Android build workflow
+(Actions > Android build) builds it on a GitHub Linux runner, signed only
+with a throwaway debug key, and checks the result:
 
-- The wallet library is in the app for 64-bit and 32-bit ARM phones and for
-  the emulator, and the app's native libraries work on phones with 16 KB
-  memory pages, as Google Play asks.
-- The app asks for no permission but the internet and the lock's fingerprint
-  or face check, and Android may neither back it up nor move its files to a
+- The wallet library and Tor are in the app for 64-bit and 32-bit ARM phones
+  and for the emulator, and the app's native libraries work on phones with
+  16 KB memory pages, as Google Play asks. Android unpacks them when the app
+  is installed, so that it can run Tor.
+- The app asks for no permission but the internet, the camera and the lock's
+  fingerprint or face check, the camera is optional, so phones without one
+  can install it, and Android may neither back it up nor move its files to a
   new phone.
 - A smoke test on the emulator, on Android 11 and Android 15, both without
   Google's apps or services: the wallet library loads and runs, a throwaway
   wallet is saved with its password under the Keystore, opens again after the
-  Keystore is read afresh, as at the next launch, and is removed. The app's
-  code for key images files and the lock answers. The app shows its first
-  screen, and keeps running without starting afresh when Android makes its
-  activity anew, as it does after a theme change. On Android 11 its window
-  is a secure one, kept out of Recents. With a made-up PIN set as the
-  emulator's screen lock, the lock asks for it in Android's own prompt, and
-  the PIN entered there unlocks it. Started again, the app deletes the copy
-  of a key images file it left behind.
+  Keystore is read afresh, as at the next launch, and is removed. Tor runs and
+  is the version `tool/fetch_tor.sh` pins. The app's code for key images
+  files, the lock and the camera answers. The app shows its first screen, and
+  keeps running without starting afresh when Android makes its activity anew,
+  as it does after a theme change. On Android 11 its window is a secure one,
+  kept out of Recents. With a made-up PIN set as the emulator's screen lock,
+  the lock asks for it in Android's own prompt, and the PIN entered there
+  unlocks it. Once the camera is allowed, Scan QR code turns the emulator's
+  camera on and turns it off again when it closes. Started again, the app
+  deletes the copy of a key images file it left behind.
 
 It runs by itself on pull requests that are ready for review and after a push
 to main, when they change the Android project, the app's code, the wallet
-library or the scripts that fetch it.
+library, Tor or the scripts that fetch them.
+
+The camera is CameraX, from AndroidX, and the codes are read by ZXing, on the
+phone. Neither uses Google Play services or sends anything anywhere, so the
+app needs no Google apps on the phone. Reading a code on a real phone waits
+for one to try it on.
 
 With Flutter, the Android SDK and a JDK (17 or later):
 
 ```sh
 sh tool/fetch_monero_c.sh android   # the Android libraries, into android/app/src/main/jniLibs
+sh tool/fetch_tor.sh android        # Tor, into the same folder
 flutter run                         # on a phone or the emulator; or flutter build apk
 ```
 
@@ -405,6 +423,8 @@ read:
 - **Monero's ring database**, in `no_backup/.shared-ringdb` (in its
   `stagenet` folder for a stagenet wallet). The wallet library keeps it in
   the home folder, which the app sets to `no_backup` (`MainActivity.kt`).
+- **Tor's own files**, once you have used Connect over Tor, in `no_backup/tor`:
+  what Tor knows about the Tor network and the entry relays it picked.
 - **A key images file you hand the app**, only until it is imported. Whether
   you choose it in Android's file picker or open it with the app or share it
   to the app, Android hands the app only a link to it. The app reads the file

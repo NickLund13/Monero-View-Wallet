@@ -1,11 +1,19 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <!-- For the Monero node, and the opt-in price lookup and Test speed
-         (SECURITY.md rule 5). -->
+         (SECURITY.md rule 5), and through the app's own Tor when Tor is on. -->
     <uses-permission android:name="android.permission.INTERNET"/>
     <!-- For the lock to ask Android to check the fingerprint or face, or the
          screen lock (AppLock.kt). Android checks them and only tells the app
-         whether the check passed. The app asks for no other permission. -->
+         whether the check passed. -->
     <uses-permission android:name="android.permission.USE_BIOMETRIC"/>
+    <!-- For scanning QR codes: the wallet's at setup, and a signing device's
+         key images. Asked for when a scan starts; the picture is never
+         saved (QrCamera.kt). The app asks for no other permission. -->
+    <uses-permission android:name="android.permission.CAMERA"/>
+    <!-- A phone without a camera can still install the app, and type the
+         wallet in. -->
+    <uses-feature android:name="android.hardware.camera" android:required="false"/>
+    <uses-feature android:name="android.hardware.camera.autofocus" android:required="false"/>
 
     <!-- Nothing the app keeps leaves the phone with a backup or a transfer
          to a new phone: the wallet's password is encrypted with a key that

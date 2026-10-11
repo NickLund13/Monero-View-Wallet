@@ -41,8 +41,8 @@ Future<void> main() async {
       : (WalletSession(wallet)..startPolling());
   // Locked from the first frame, so the balance never shows before Face ID.
   await appLock.start(on: session?.lockOn ?? false);
-  // Setup can scan the wallet's QR code with the iPhone's camera.
-  if (Platform.isIOS) qrCamera = IosQrCamera();
+  // Setup can scan the wallet's QR code with the phone's camera.
+  if (Platform.isIOS || Platform.isAndroid) qrCamera = PhoneQrCamera();
   runApp(
     MainApp(
       home: session == null
@@ -113,6 +113,15 @@ Future<String?> _keepOnAndroid() async {
   ringDatabase = '$home/.shared-ringdb';
   walletFile = '$folder/wallet';
   keepAppearance(File('$folder/appearance'));
+  // The Tor Project's tor ships with the app as libtor.so, since Android
+  // runs a program only from the app's native library folder, which the
+  // Runner names (MainActivity.kt). It keeps what it knows of the Tor network
+  // in the same folder as the wallet, which Android never backs up.
+  final tor = Platform.environment[torProgramVariable] ?? '';
+  if (tor.isNotEmpty) {
+    torProgram = tor;
+    torFolder = '$home/tor';
+  }
   return folder;
 }
 
