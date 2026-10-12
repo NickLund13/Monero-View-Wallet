@@ -73,10 +73,19 @@ void main() {
         for (final node in nodes) {
           final onion = isOnion(node.host);
           if (onion && tor == null) continue;
-          final answer = await ViewWallet.probeNode(
+          var answer = await ViewWallet.probeNode(
             node.host,
             tor: onion ? tor : null,
           );
+          // A node can miss one request, and Tor's first circuit to an onion
+          // node often fails. Ask once more before calling it unreachable.
+          if (answer.height == 0) {
+            await Future<void>.delayed(const Duration(seconds: 30));
+            answer = await ViewWallet.probeNode(
+              node.host,
+              tor: onion ? tor : null,
+            );
+          }
           final problem = answerProblem(network, answer);
           if (problem != null) {
             problems.add('${node.host}: $problem');

@@ -871,10 +871,12 @@ void main() {
         });
 
         // Tor has no time limit of its own. Say how far it got if it stalls.
+        // On GitHub's machines it has needed more than three minutes to load
+        // the Tor network's directory from a slow relay.
         final tor = await builtInTor.start().timeout(
-          const Duration(minutes: 3),
+          const Duration(minutes: 5),
           onTimeout: () => fail(
-            'Tor got to ${builtInTor.progress}% in 3 minutes. '
+            'Tor got to ${builtInTor.progress}% in 5 minutes. '
             'Its last lines:\n${builtInTor.notices.join('\n')}',
           ),
         );
@@ -963,9 +965,9 @@ void main() {
         });
 
         Future<String> connect() => tor.start().timeout(
-          const Duration(minutes: 3),
+          const Duration(minutes: 5),
           onTimeout: () => fail(
-            'Tor got to ${tor.progress}% in 3 minutes. '
+            'Tor got to ${tor.progress}% in 5 minutes. '
             'It last said:\n${tor.notices.join('\n')}',
           ),
         );
@@ -1004,7 +1006,8 @@ void main() {
         );
       },
       skip: needsNode,
-      timeout: const Timeout(Duration(minutes: 8)),
+      // Tor starts twice, up to five minutes each.
+      timeout: const Timeout(Duration(minutes: 12)),
     );
 
     testWidgets("an onion node is only used over the app's own Tor", (
