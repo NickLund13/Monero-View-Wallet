@@ -11,6 +11,7 @@
 // The tests that need a node are skipped unless MVW_STAGENET_NODE is set:
 //   $env:MVW_STAGENET_NODE = "node.monerodevs.org:38089"; flutter test
 
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:isolate';
@@ -852,32 +853,23 @@ void main() {
     test(
       "reaches the stagenet node and Kraken through the app's own Tor",
       () async {
-        final dir = Directory.systemTemp.createTempSync('mvw_tor');
         // From windows/monero_c, where setUpAll leaves these tests.
         torProgram = File('../tor/tor${Platform.isWindows ? '.exe' : ''}')
             .absolute
             .path;
-        torFolder = dir.path;
+        final folders = <Directory>[];
         addTearDown(() async {
           builtInTor.stop();
           torProgram = torFolder = null;
           // Tor lets go of its files a moment after it is told to stop.
           await Future<void>.delayed(const Duration(seconds: 2));
-          try {
-            dir.deleteSync(recursive: true);
-          } on FileSystemException {
-            // Left in the temporary folder.
-          }
+          _delete(folders);
         });
 
-        // Tor has no time limit of its own. Say how far it got if it stalls.
-        final tor = await builtInTor.start().timeout(
-          const Duration(minutes: 3),
-          onTimeout: () => fail(
-            'Tor got to ${builtInTor.progress}% in 3 minutes. '
-            'Its last lines:\n${builtInTor.notices.join('\n')}',
-          ),
-        );
+        final tor = await _startTor(folders, (folder) {
+          torFolder = folder;
+          return builtInTor;
+        }, (stalled, _) async => stalled.stop());
         expect(tor, torAddress);
         expect(builtInTor.ready, isTrue);
         expect(
@@ -915,7 +907,8 @@ void main() {
         expect(price, greaterThan(0));
       },
       skip: needsNode,
-      timeout: const Timeout(Duration(minutes: 8)),
+      // Up to three tries of two minutes for Tor, then two minutes to scan.
+      timeout: const Timeout(Duration(minutes: 10)),
     );
 
     test(
@@ -927,49 +920,61 @@ void main() {
         final program = File('../tor/tor${Platform.isWindows ? '.exe' : ''}')
             .absolute
             .path;
-        final dir = Directory.systemTemp.createTempSync('mvw_tor');
+        final folders = <Directory>[];
         final realRun = runTorInApp;
-        Process? process;
-        var runs = 0;
+        // Each try's Tor by its folder, how often the app asked to run it,
+        // and the tries given up on: their Tor has ended for good.
+        final processes = <String, Process>{};
+        final runs = <String, int>{};
+        final ended = <String>{};
         runTorInApp = (arguments) async {
-          if (runs++ > 0) return 'running';
-          process = await Process.start(
+          final folder = arguments[arguments.indexOf('--DataDirectory') + 1];
+          if (ended.contains(folder)) return 'exited';
+          runs[folder] = (runs[folder] ?? 0) + 1;
+          if (runs[folder]! > 1) return 'running';
+          final process = processes[folder] = await Process.start(
             program,
             arguments,
             environment: Platform.isLinux
                 ? {'LD_LIBRARY_PATH': File(program).parent.path}
                 : null,
           );
-          process!.stdout.drain<void>();
-          process!.stderr.drain<void>();
+          process.stdout.drain<void>();
+          process.stderr.drain<void>();
           return 'started';
         };
         torInApp = true;
-        torFolder = dir.path;
-        final tor = builtInTor = BuiltInTor();
+        var tor = builtInTor = BuiltInTor();
         addTearDown(() async {
           tor.stop();
           builtInTor = BuiltInTor();
           runTorInApp = realRun;
           torInApp = false;
           torFolder = null;
-          process?.kill();
-          await process?.exitCode;
-          try {
-            dir.deleteSync(recursive: true);
-          } on FileSystemException {
-            // Left in the temporary folder.
+          for (final process in processes.values) {
+            process.kill();
+            await process.exitCode;
           }
+          _delete(folders);
         });
 
-        Future<String> connect() => tor.start().timeout(
-          const Duration(minutes: 3),
-          onTimeout: () => fail(
-            'Tor got to ${tor.progress}% in 3 minutes. '
-            'It last said:\n${tor.notices.join('\n')}',
-          ),
+        final proxy = await _startTor(
+          folders,
+          (folder) {
+            torFolder = folder;
+            return tor;
+          },
+          // The Tor inside the app runs from one folder until the app ends,
+          // so the next try is a new launch: a new Tor, in a new folder.
+          (stalled, folder) async {
+            stalled.stop();
+            ended.add(folder);
+            final process = processes[folder];
+            process?.kill();
+            await process?.exitCode;
+            tor = builtInTor = BuiltInTor();
+          },
         );
-        final proxy = await connect();
         expect(
           (await ViewWallet.probeNode(node!, tor: proxy)).height,
           greaterThan(0),
@@ -995,16 +1000,27 @@ void main() {
         }
         expect(await listening(), isFalse);
 
-        // Started again: the same Tor, back on the network.
-        expect(await connect(), proxy);
-        expect(runs, 1, reason: 'the same Tor, not a second one');
+        // Started again: the same Tor, back on the network, which it now
+        // knows.
+        expect(
+          await tor.start().timeout(
+            const Duration(minutes: 3),
+            onTimeout: () => fail(
+              'Tor got back to ${tor.progress}% in 3 minutes. '
+              'It last said:\n${tor.notices.join('\n')}',
+            ),
+          ),
+          proxy,
+        );
+        expect(runs[torFolder], 1, reason: 'the same Tor, not a second one');
         expect(
           (await ViewWallet.probeNode(node, tor: proxy)).height,
           greaterThan(0),
         );
       },
       skip: needsNode,
-      timeout: const Timeout(Duration(minutes: 8)),
+      // Up to three tries of two minutes for Tor, then three to start again.
+      timeout: const Timeout(Duration(minutes: 12)),
     );
 
     testWidgets("an onion node is only used over the app's own Tor", (
@@ -3374,6 +3390,48 @@ class _FailsImport extends _OnNode {
 /// Lets a test make real HTTP requests: testWidgets swaps HttpClient() for one
 /// that answers 400 to everything.
 class _NoOverrides extends HttpOverrides {}
+
+/// Starts the real Tor and returns its proxy address. Each try starts in a
+/// new temporary folder, added to [folders]: [use] makes Tor start from it
+/// and returns that Tor. Tor has no time limit of its own, and on GitHub's
+/// machines it sometimes stalls for more than five minutes while it loads the
+/// Tor network's directory from a slow relay, where it otherwise connects in
+/// under one. A new folder starts from another relay, so a try that hasn't
+/// connected in two minutes is stopped with [giveUp] and the next one starts.
+Future<String> _startTor(
+  List<Directory> folders,
+  BuiltInTor Function(String folder) use,
+  Future<void> Function(BuiltInTor stalled, String folder) giveUp,
+) async {
+  const tries = 3;
+  for (var tried = 1; ; tried++) {
+    final folder = Directory.systemTemp.createTempSync('mvw_tor');
+    folders.add(folder);
+    final tor = use(folder.path);
+    try {
+      return await tor.start().timeout(const Duration(minutes: 2));
+    } on TimeoutException {
+      if (tried == tries) {
+        fail(
+          "Tor didn't connect in $tries tries of two minutes, each from a new "
+          'folder. The last got to ${tor.progress}%, and last said:\n'
+          '${tor.notices.join('\n')}',
+        );
+      }
+      await giveUp(tor, folder.path);
+    }
+  }
+}
+
+void _delete(List<Directory> folders) {
+  for (final folder in folders) {
+    try {
+      folder.deleteSync(recursive: true);
+    } on FileSystemException {
+      // Left in the temporary folder.
+    }
+  }
+}
 
 /// Stands in for the app's Tor: it is connected at once, or fails to start
 /// with [failure].
