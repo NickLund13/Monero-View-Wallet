@@ -11,8 +11,9 @@ import 'wallet.dart';
 /// them. Checked on 2026-10-09: each answered over TLS (an onion node over
 /// Tor, which encrypts it end to end), was on its network and synced to the
 /// chain tip. The Stagenet tests workflow checks them again
-/// (test/public_nodes_test.dart). The onion nodes are from Feather Wallet's
-/// node list, named after who runs them.
+/// (test/public_nodes_test.dart). The onion node is from Feather Wallet's
+/// node list, named after who runs it. plowsof's onion node was taken out on
+/// 2026-10-12: that check couldn't reach it in half of its runs.
 const publicNodes = {
   Network.mainnet: [
     (host: 'node.monerodevs.org:18089', operator: 'monerodevs.org'),
@@ -21,10 +22,6 @@ const publicNodes = {
     (host: 'rucknium.me:18081', operator: 'Rucknium'),
     (host: 'xmr.stormycloud.org:18089', operator: 'StormyCloud'),
     (host: 'nodes.hashvault.pro:18081', operator: 'HashVault'),
-    (
-      host: 'plowsof3t5hogddwabaeiyrno25efmzfxyro2vligremt7sxpsclfaid.onion:18089',
-      operator: 'plowsof',
-    ),
     (
       host: 'rucknium757bokwv3ss35ftgc3gzb7hgbvvglbg3hisp7tsj2fkd2nyd.onion:18081',
       operator: 'Rucknium',
