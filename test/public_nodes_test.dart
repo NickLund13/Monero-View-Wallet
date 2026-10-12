@@ -46,19 +46,20 @@ void main() {
       });
 
       final problems = <String>[];
-      // Tor can stall while it loads the Tor network's directory from a slow
-      // relay. A second try, from a new folder, starts from another relay.
+      // Tor can stall for more than five minutes while it loads the Tor
+      // network's directory from a slow relay, where it otherwise connects in
+      // under one. Each try, from a new folder, starts from another relay.
       String? tor;
-      for (var tries = 1; tor == null && tries <= 2; tries++) {
+      for (var tries = 1; tor == null && tries <= 3; tries++) {
         final dir = Directory.systemTemp.createTempSync('mvw_tor');
         folders.add(dir);
         torFolder = dir.path;
         try {
-          tor = await builtInTor.start().timeout(const Duration(minutes: 3));
+          tor = await builtInTor.start().timeout(const Duration(minutes: 2));
         } on TimeoutException {
-          if (tries == 2) {
+          if (tries == 3) {
             problems.add(
-              "Tor didn't connect in two tries (the second got to "
+              "Tor didn't connect in three tries (the last got to "
               '${builtInTor.progress}%), so the onion nodes were not checked. '
               'Its last lines:\n'
               '${builtInTor.notices.join('\n')}',
