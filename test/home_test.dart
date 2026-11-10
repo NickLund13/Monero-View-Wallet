@@ -88,6 +88,17 @@ void main() {
     expect(find.textContaining('Synced to block 2000'), findsOne);
     expect(find.byType(LinearProgressIndicator), findsNothing);
 
+    // A node slow to answer again, as after the app was in the background,
+    // is no alarm yet.
+    session
+      ..connecting = true
+      ..changed();
+    await tester.pump();
+    expect(find.text('Connecting to your node…'), findsOne);
+    expect(find.byType(LinearProgressIndicator), findsOne);
+    expect(find.textContaining("Can't reach your node"), findsNothing);
+    expect(find.text('Change node'), findsNothing);
+
     await tester.pumpWidget(const SizedBox());
   });
 
@@ -454,6 +465,11 @@ class _Session extends WalletSession {
 
   @override
   String get node => 'node.example.org:38081';
+
+  /// True for a node that hasn't answered the last polls, when a test says
+  /// so.
+  @override
+  bool connecting = false;
 
   /// Redraws the screens after the test changed what the session knows.
   void changed() => notifyListeners();

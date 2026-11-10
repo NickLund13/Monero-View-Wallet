@@ -87,6 +87,12 @@ class _SyncViewState extends State<SyncView> {
         Text(
           gettingReady
               ? 'Getting ready: listing the blocks before height $from'
+              // A scan carried on after a launch doesn't know how far there
+              // is to go until the node has answered. Below the card it says
+              // so if the node can't be reached.
+              : s.nodeHeight == 0
+              ? '${s.reachable ? 'Connecting to your node… · from' : 'From'} '
+                    'height $from'
               : '$scanned of $total blocks · from height $from',
           style: context.caption,
         ),
@@ -109,10 +115,10 @@ class _SyncViewState extends State<SyncView> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 StatusDot(
-                  s.reachable
-                      ? c.green
-                      : s.tor != null && !builtInTor.ready
+                  s.connecting || (s.tor != null && !builtInTor.ready)
                       ? c.amber
+                      : s.reachable
+                      ? c.green
                       : c.red,
                 ),
                 Flexible(

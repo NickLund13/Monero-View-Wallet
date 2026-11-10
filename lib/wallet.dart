@@ -496,6 +496,17 @@ class ViewWallet {
   static bool get savedButUnreadable =>
       walletFile != null && File('$walletFile.keys').existsSync();
 
+  /// Makes the saved wallet unreadable while it is still open: deletes its
+  /// password, and its keys file where the system deletes a file that is
+  /// open (Windows doesn't). Without the keys file the next launch has no
+  /// wallet, rather than one that [savedButUnreadable].
+  static void _forgetKeys() {
+    final path = walletFile;
+    if (path == null) return;
+    secretStore.delete(_passwordName(path));
+    _delete('$path.keys');
+  }
+
   /// Deletes the saved wallet: its password first, without which the files
   /// can't be read, then the files, and empties [ringDatabase]. Close the
   /// wallet before calling this: Windows won't delete a keys file that is
@@ -986,7 +997,12 @@ class ViewWallet {
   }
 
   /// Closes the wallet and deletes it from this device, see [forgetSaved].
+  ///
+  /// What opens the saved files goes first, and at once: closing can take
+  /// minutes (see [close]), and an app that is closed meanwhile must not find
+  /// the wallet again at its next launch.
   Future<void> forget() async {
+    if (_saved) _forgetKeys();
     await close();
     if (_saved) forgetSaved();
   }

@@ -90,6 +90,7 @@ String shortAddress(String address) => address.length <= 14
 /// scanned as far as it, and at least to [height].
 bool readyToImport(WalletSession s, {int height = 0}) =>
     s.reachable &&
+    !s.connecting &&
     s.scanned &&
     !s.catchingUp &&
     !s.importing &&
@@ -379,6 +380,9 @@ class _KeyImagesScreenState extends State<KeyImagesScreen> {
                         !s.reachable
                             ? "Can't reach your node. An import waits until "
                                   'it answers.'
+                            : s.connecting
+                            ? 'Connecting to your node. An import waits '
+                                  'until it answers.'
                             : s.catchingUp
                             ? 'Still syncing · '
                                   '${plural(s.blocksToGo, 'block')} to go. An '
@@ -698,7 +702,7 @@ class _ImportProblemScreenState extends State<ImportProblemScreen> {
     } else if (!s.reachable) {
       problem = true;
       line = "Can't reach your node. The import waits until it answers.";
-    } else if (s.nodeHeight == 0) {
+    } else if (s.connecting || s.nodeHeight == 0) {
       line = 'Connecting to your node…';
     } else if (s.height < s.wallet.restoreHeight) {
       line = 'Getting ready to scan';

@@ -516,7 +516,7 @@ class _HomeScreenState extends State<HomeScreen> {
         ],
       );
     }
-    if (_s.catchingUp) {
+    if (_s.connecting || _s.catchingUp) {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -526,8 +526,8 @@ class _HomeScreenState extends State<HomeScreen> {
               Expanded(
                 child: Text(
                   // A wallet opened from its file hasn't heard from the node
-                  // yet.
-                  _s.nodeHeight == 0
+                  // yet, and a node can be slow to answer again.
+                  _s.connecting || _s.nodeHeight == 0
                       ? 'Connecting to your node…'
                       : 'Catching up · ${plural(_s.blocksToGo, 'block')} to go',
                   style: context.caption,

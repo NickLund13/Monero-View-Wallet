@@ -179,7 +179,7 @@ class MainApp extends StatelessWidget {
   Widget build(BuildContext context) => ValueListenableBuilder(
     valueListenable: appearance,
     builder: (context, mode, _) => MaterialApp(
-      title: 'Monero View Wallet',
+      title: 'Monero View',
       theme: lightTheme,
       darkTheme: darkTheme,
       themeMode: mode,
