@@ -645,8 +645,8 @@ class _ActivityRow extends StatelessWidget {
   String get _when {
     final t = transfer;
     if (t.height == 0) return 'Pending';
-    if (t.confirmations < unlockBlocks) {
-      return '${t.confirmations} of $unlockBlocks confirmations';
+    if (t.confirmations < t.unlockBlocks) {
+      return '${t.confirmations} of ${t.unlockBlocks} confirmations';
     }
     return formatDate(t.time);
   }
@@ -689,7 +689,7 @@ class _ActivityRow extends StatelessWidget {
                         ? '$_when · found via key images'
                         : to.isEmpty ||
                               transfer.height == 0 ||
-                              transfer.confirmations < unlockBlocks
+                              transfer.confirmations < transfer.unlockBlocks
                         ? _when
                         : '$_when · $to',
                     style: context.caption,

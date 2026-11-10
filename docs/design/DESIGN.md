@@ -453,7 +453,9 @@ first" shows the node's height instead.
   in mono (incoming in `text`, outgoing in `muted`). A payment that has
   unlocked shows where it went after the date: its Receive label, or
   "subaddress #N", or "primary address"; until then the line only counts
-  confirmations. Tapping a row opens Transaction.
+  confirmations: "N of 10 confirmations", or "N of 60" for a block reward
+  (mined coins, P2Pool's payouts among them), which Monero unlocks after 60
+  blocks. Tapping a row opens Transaction.
 
 ### 8. Receive
 

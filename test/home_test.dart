@@ -327,13 +327,20 @@ void main() {
       wallet.addSubaddress();
     }
     wallet.setLabel(3, 'Rent from Alex');
-    Transfer received(Set<int> to, {int confirmations = 100}) => Transfer(
+    Transfer received(
+      Set<int> to, {
+      int confirmations = 100,
+      bool mined = false,
+    }) => Transfer(
       incoming: true,
       amount: 1000000000000,
       height: 1900,
       confirmations: confirmations,
       time: DateTime(2026, 10, 2),
       subaddresses: to,
+      mined: mined,
+      // Its own ID, so the transaction screen finds it again.
+      hash: mined ? '6' * 64 : '',
     );
     session.transfers = [
       received({0}),
@@ -341,6 +348,7 @@ void main() {
       received({3}),
       received({1}, confirmations: 4),
       received({}), // to another account
+      received({1}, confirmations: 25, mined: true),
     ];
     await phone(tester);
     await tester.pumpWidget(MainApp(home: HomeScreen(session)));
@@ -350,6 +358,13 @@ void main() {
     // Where it went shows once it has unlocked.
     expect(find.text('4 of 10 confirmations'), findsOne);
     expect(find.text('2 Oct 2026'), findsOne);
+    // A block reward, as mining pays, unlocks after 60 blocks.
+    expect(find.text('25 of 60 confirmations'), findsOne);
+
+    // The transaction screen counts the same.
+    await tester.tap(find.text('25 of 60 confirmations'));
+    await tester.pumpAndSettle();
+    expect(find.text('25 of 60'), findsOne);
 
     await tester.pumpWidget(const SizedBox());
   });

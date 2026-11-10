@@ -12,9 +12,6 @@ import 'package:flutter/foundation.dart';
 import 'tor.dart';
 import 'wallet.dart';
 
-/// Blocks before a received output can be spent.
-const unlockBlocks = 10;
-
 /// How many polls in a row the node may leave unanswered before the screens
 /// say it can't be reached: ten seconds' worth, and thirty through Tor, which
 /// takes longer to reach a node. Until then they say the app is connecting.
@@ -246,7 +243,7 @@ class WalletSession extends ChangeNotifier {
   int get lockingBlocks {
     var blocks = 0;
     for (final t in transfers) {
-      final left = unlockBlocks - (t.height == 0 ? 0 : t.confirmations);
+      final left = t.unlockBlocks - (t.height == 0 ? 0 : t.confirmations);
       if (left > blocks) blocks = left;
     }
     return blocks;

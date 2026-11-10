@@ -1577,6 +1577,18 @@ void main() {
       ];
     expect(session.locking, 2);
     expect(session.lockingBlocks, 6);
+    // A block reward, as mining pays, unlocks after 60 blocks, not 10.
+    session.transfers = [
+      Transfer(
+        incoming: true,
+        amount: 2,
+        height: 76,
+        confirmations: 25,
+        time: DateTime(2026),
+        mined: true,
+      ),
+    ];
+    expect(session.lockingBlocks, 35);
 
     expect(session.showKeyImagesNotice, isFalse);
     session.outputs = (total: 2, spent: 0, withoutKeyImage: 2);
@@ -2359,6 +2371,21 @@ void main() {
       await tester.pump();
       expect(enabled(tester, 'Rescan'), isTrue);
 
+      // A rescan asks the node first, so it waits for a node that has yet
+      // to answer.
+      session.connecting = true;
+      session.dismissKeyImagesNotice(); // any change redraws the screens
+      await tester.pump();
+      expect(enabled(tester, 'Rescan'), isFalse);
+      expect(
+        find.text('Connecting to your node. Rescan when it answers.'),
+        findsOne,
+      );
+      session.connecting = false;
+      session.dismissKeyImagesNotice();
+      await tester.pump();
+      expect(enabled(tester, 'Rescan'), isTrue);
+
       Future<void> rescan({required bool yes}) async {
         await tester.tap(find.widgetWithText(FilledButton, 'Rescan'));
         await tester.pumpAndSettle();
@@ -2478,6 +2505,7 @@ void main() {
     session.dismissKeyImagesNotice();
     await tester.pump();
     expect(find.text('Public node · connected · 42 ms'), findsOne);
+    expect(asked, [node], reason: 'timed once');
 
     final semantics = tester.ensureSemantics();
     expect(

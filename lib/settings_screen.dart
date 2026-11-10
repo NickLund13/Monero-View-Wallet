@@ -113,7 +113,9 @@ class _NodeRowState extends State<_NodeRow> {
   void _time() {
     final s = widget.session;
     final node = s.node;
-    if (_timed == node || !s.reachable) return;
+    // Timed once the node has answered the wallet: asked while it is still
+    // connecting, it may not answer, and it isn't asked again.
+    if (_timed == node || !s.reachable || s.connecting) return;
     _timed = node;
     _ms = null;
     askNode(node, tor: s.tor).then((answer) {
