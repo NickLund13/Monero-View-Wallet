@@ -32,9 +32,6 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   late bool _firstSync;
 
-  /// The balance is showing USD, which needs the price lookup on.
-  bool _usd = false;
-
   WalletSession get _s => widget.session;
 
   /// Saves the wallet when the app loses focus, which on an iPhone comes
@@ -50,6 +47,7 @@ class _HomeScreenState extends State<HomeScreen> {
     super.initState();
     _firstSync = !_s.scanned;
     _s.addListener(_onUpdate);
+    usdPrice.addListener(_onPrice);
     _lifecycle = AppLifecycleListener(onInactive: _s.save);
     receivedKeyImagesFile.addListener(_onReceived);
     // The file that started the app can come before this screen.
@@ -60,9 +58,16 @@ class _HomeScreenState extends State<HomeScreen> {
   void dispose() {
     _lifecycle.dispose();
     receivedKeyImagesFile.removeListener(_onReceived);
+    usdPrice.removeListener(_onPrice);
     _s.removeListener(_onUpdate);
     _s.dispose();
     super.dispose();
+  }
+
+  /// With the price lookup turned off, the balance goes back to XMR, and
+  /// stays there when the lookup is next turned on.
+  void _onPrice() {
+    if (!usdPrice.on) _s.setShowUsd(false);
   }
 
   void _onUpdate() {
@@ -290,6 +295,7 @@ class _HomeScreenState extends State<HomeScreen> {
         for (final t in _s.transfers)
           _ActivityRow(
             t,
+            hidden: _s.hideAmounts,
             to: [
               for (final (i, label) in paidTo(_s, t))
                 label.isNotEmpty
@@ -339,13 +345,13 @@ class _HomeScreenState extends State<HomeScreen> {
     return yes == true;
   }
 
-  /// The balance in XMR, or in USD once the person tapped it. With the price
-  /// lookup off, a tap asks before turning it on.
+  /// The balance in XMR, or in USD once the person tapped it: the choice is
+  /// kept with the wallet. With the price lookup off, a tap asks before
+  /// turning it on. Beside it, the eye button hides every amount.
   Widget _balance() {
     final c = context.colors;
-    // Turned off: start from XMR again when it is next turned on.
-    if (!usdPrice.on) _usd = false;
-    final usd = _usd;
+    final usd = _s.showUsd && usdPrice.on;
+    final hide = _s.hideAmounts;
     final price = usdPrice.perXmr;
     final amount = FittedBox(
       fit: BoxFit.scaleDown,
@@ -354,11 +360,14 @@ class _HomeScreenState extends State<HomeScreen> {
         TextSpan(
           children: [
             TextSpan(
-              text: !usd
+              text: hide
+                  ? hiddenAmount
+                  : !usd
                   ? formatXmr(_s.balance, short: true)
                   : price == null
                   ? '—'
                   : formatUsd(_s.balance / atomicUnitsPerXmr * price),
+              semanticsLabel: hide ? 'Balance hidden' : null,
               style: mono(size: 40, weight: FontWeight.w500),
             ),
             TextSpan(
@@ -371,12 +380,20 @@ class _HomeScreenState extends State<HomeScreen> {
     );
     final Widget below;
     if (!usd) {
-      below = Text(_unlockedLine, style: mono(size: 13, color: c.muted));
+      below = Text(
+        hide ? '$hiddenAmount unlocked' : _unlockedLine,
+        semanticsLabel: hide ? 'Unlocked amount hidden' : null,
+        style: mono(size: 13, color: c.muted),
+      );
     } else if (price != null) {
       final asOf = usdPrice.failed ? ' as of ${formatTime(usdPrice.at!)}' : '';
+      final unlocked = hide
+          ? hiddenAmount
+          : '\$${formatUsd(_s.unlocked / atomicUnitsPerXmr * price)}';
+      final rate = 'at \$${formatUsd(price)} per XMR$asOf';
       below = Text(
-        '\$${formatUsd(_s.unlocked / atomicUnitsPerXmr * price)} unlocked · '
-        'at \$${formatUsd(price)} per XMR$asOf',
+        '$unlocked unlocked · $rate',
+        semanticsLabel: hide ? 'Unlocked amount hidden · $rate' : null,
         style: mono(size: 13, color: c.muted),
       );
     } else {
@@ -389,7 +406,7 @@ class _HomeScreenState extends State<HomeScreen> {
         style: context.caption,
       );
     }
-    return Semantics(
+    final balance = Semantics(
       button: true,
       child: InkWell(
         onTap: () async {
@@ -398,12 +415,12 @@ class _HomeScreenState extends State<HomeScreen> {
             // Asks for the price at once. main() remembers the choice, as it
             // does the Settings switch.
             usdPrice.on = true;
-            setState(() => _usd = true);
+            _s.setShowUsd(true);
             return;
           }
-          setState(() => _usd = !_usd);
+          _s.setShowUsd(!usd);
           // Try again at once rather than at the next refresh.
-          if (_usd && (usdPrice.perXmr == null || usdPrice.failed)) {
+          if (!usd && (usdPrice.perXmr == null || usdPrice.failed)) {
             usdPrice.refresh();
           }
         },
@@ -435,6 +452,23 @@ class _HomeScreenState extends State<HomeScreen> {
           ],
         ),
       ),
+    );
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(child: balance),
+        const SizedBox(width: 8),
+        IconButton(
+          tooltip: hide ? 'Show balance' : 'Hide balance',
+          onPressed: () => _s.setHideAmounts(!hide),
+          style: IconButton.styleFrom(fixedSize: const Size(44, 44)),
+          color: c.muted,
+          icon: Icon(
+            hide ? Icons.visibility_off_outlined : Icons.visibility_outlined,
+            size: 20,
+          ),
+        ),
+      ],
     );
   }
 
@@ -589,9 +623,17 @@ class _HomeScreenState extends State<HomeScreen> {
 }
 
 class _ActivityRow extends StatelessWidget {
-  const _ActivityRow(this.transfer, {required this.to, required this.onTap});
+  const _ActivityRow(
+    this.transfer, {
+    required this.to,
+    required this.hidden,
+    required this.onTap,
+  });
 
   final Transfer transfer;
+
+  /// The amount shows as dots: Home's eye button is on.
+  final bool hidden;
 
   /// Where a payment went ("subaddress #3", or its label), or empty. Shown
   /// once the payment has unlocked; until then the row says how far it is.
@@ -656,7 +698,10 @@ class _ActivityRow extends StatelessWidget {
               ),
             ),
             Text(
-              '${incoming ? '+' : '−'}${formatXmr(transfer.amount)}',
+              hidden
+                  ? hiddenAmount
+                  : '${incoming ? '+' : '−'}${formatXmr(transfer.amount)}',
+              semanticsLabel: hidden ? 'Amount hidden' : null,
               style: mono(color: incoming ? c.text : c.muted),
             ),
           ],

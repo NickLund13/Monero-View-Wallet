@@ -12,6 +12,7 @@
 # - The app asks for no permission but the internet, the camera and the lock's
 #   fingerprint or face check, needs no camera to be installed, and Android
 #   may not back it up or move its files to a new phone.
+# - It stays upright, as on iPhone.
 set -eu
 
 apk=$1
@@ -79,6 +80,11 @@ fi
 # libraries there as files when it installs the app.
 if echo "$manifest" | grep -q 'android:extractNativeLibs(0x[0-9a-f]*)=false'; then
   echo "::error::Android wouldn't install the native libraries as files, so tor couldn't run."
+  failed=1
+fi
+# Upright only, as on iPhone: 1 is portrait.
+if ! echo "$manifest" | grep -Eq 'android:screenOrientation\(0x[0-9a-f]+\)=(1|0x0*1)( |$)'; then
+  echo "::error::The app isn't kept upright."
   failed=1
 fi
 # A phone without a camera can still install the app, and type the wallet in:

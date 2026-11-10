@@ -29,6 +29,8 @@ const _lockNote = 'mvw.lock';
 const _nameNote = 'mvw.name';
 const _speedNote = 'mvw.speedTest';
 const _noticeNote = 'mvw.noticeDismissed';
+const _currencyNote = 'mvw.currency';
+const _hideNote = 'mvw.hideAmounts';
 
 /// What Last import says key images scanned by QR came from, in place of a
 /// file's name.
@@ -99,6 +101,8 @@ class WalletSession extends ChangeNotifier {
       lastImport = KeyImageImport.fromNote(wallet.remembered(_importNote)),
       lockOn = wallet.remembered(_lockNote) != 'off',
       testAllNodes = wallet.remembered(_speedNote) != 'picked',
+      showUsd = wallet.remembered(_currencyNote) == 'usd',
+      hideAmounts = wallet.remembered(_hideNote) == 'on',
       _name = wallet.remembered(_nameNote),
       _noticeDismissedAt =
           int.tryParse(wallet.remembered(_noticeNote) ?? '') ?? 0 {
@@ -152,6 +156,16 @@ class WalletSession extends ChangeNotifier {
   /// inside the wallet's encrypted file, like [lockOn].
   bool testAllNodes;
 
+  /// Home shows the balance in USD rather than XMR: the person's last choice,
+  /// made by tapping the balance. USD shows only while the price lookup is on
+  /// (price.dart). Kept inside the wallet's encrypted file.
+  bool showUsd;
+
+  /// Home's eye button: every amount on Home and Transaction shows as dots,
+  /// for a phone looked at by others. Kept inside the wallet's encrypted
+  /// file, so the amounts stay hidden at the next launch.
+  bool hideAmounts;
+
   /// The person's own name for the wallet, shown on Home. Kept inside the
   /// wallet's encrypted file and never sent anywhere.
   String get name => _name ?? 'Monero wallet';
@@ -190,6 +204,8 @@ class WalletSession extends ChangeNotifier {
       _speedNote: testAllNodes ? 'all' : 'picked',
       _nameNote: _name ?? '',
       _noticeNote: _noticeDismissedAt == 0 ? '' : '$_noticeDismissedAt',
+      _currencyNote: showUsd ? 'usd' : '',
+      _hideNote: hideAmounts ? 'on' : '',
     });
   }
 
@@ -381,6 +397,19 @@ class WalletSession extends ChangeNotifier {
 
   Future<void> setLockOn(bool on) {
     lockOn = on;
+    notifyListeners();
+    return save();
+  }
+
+  Future<void> setShowUsd(bool usd) {
+    if (usd == showUsd) return Future.value();
+    showUsd = usd;
+    notifyListeners();
+    return save();
+  }
+
+  Future<void> setHideAmounts(bool hide) {
+    hideAmounts = hide;
     notifyListeners();
     return save();
   }

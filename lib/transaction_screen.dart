@@ -46,6 +46,8 @@ class _TransactionScreenState extends State<TransactionScreen> {
         orElse: () => widget.transfer,
       );
       final incoming = t.incoming;
+      // Home's eye button hides the amounts here too.
+      final hide = widget.session.hideAmounts;
       final to = paidTo(widget.session, t);
       final rows = <(String, Widget)>[
         if (to.isNotEmpty)
@@ -62,7 +64,17 @@ class _TransactionScreenState extends State<TransactionScreen> {
             ),
           ),
         // The sender paid the fee of a payment received.
-        if (!incoming) ('Fee', _number(formatXmr(t.fee))),
+        if (!incoming)
+          (
+            'Fee',
+            hide
+                ? Text(
+                    hiddenAmount,
+                    semanticsLabel: 'Hidden',
+                    style: mono(size: 14),
+                  )
+                : _number(formatXmr(t.fee)),
+          ),
         (
           'Confirmations',
           t.height == 0
@@ -113,7 +125,10 @@ class _TransactionScreenState extends State<TransactionScreen> {
               TextSpan(
                 children: [
                   TextSpan(
-                    text: '${incoming ? '+' : '−'}${formatXmr(t.amount)}',
+                    text: hide
+                        ? hiddenAmount
+                        : '${incoming ? '+' : '−'}${formatXmr(t.amount)}',
+                    semanticsLabel: hide ? 'Amount hidden' : null,
                     style: mono(size: 36, weight: FontWeight.w500),
                   ),
                   TextSpan(

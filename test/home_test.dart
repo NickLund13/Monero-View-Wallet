@@ -15,6 +15,7 @@ import 'package:monero/src/monero.dart';
 import 'package:monero/src/wallet2.dart';
 import 'package:monero_view_wallet/home_screen.dart';
 import 'package:monero_view_wallet/main.dart';
+import 'package:monero_view_wallet/price.dart';
 import 'package:monero_view_wallet/session.dart';
 import 'package:monero_view_wallet/ui.dart';
 import 'package:monero_view_wallet/wallet.dart';
@@ -26,6 +27,13 @@ void main() {
     address: full.address(),
     viewKey: full.secretViewKey(),
     restoreHeight: 0,
+  );
+
+  // Text as drawn, without what a screen reader says in place of dots.
+  Finder shown(String text) => find.byWidgetPredicate(
+    (w) =>
+        w is RichText &&
+        w.text.toPlainText(includeSemanticsLabels: false) == text,
   );
 
   // Tall enough that no screen has to scroll.
@@ -177,6 +185,129 @@ void main() {
     await first.rename('');
     expect(WalletSession(wallet).name, 'Monero wallet');
   });
+
+  testWidgets('the eye button hides every amount, on Home and a transaction', (
+    tester,
+  ) async {
+    final semantics = tester.ensureSemantics();
+    final session = synced()
+      ..balance = 2500000000000
+      ..unlocked = 1500000000000
+      ..transfers = [
+        Transfer(
+          incoming: true,
+          amount: 1000000000000,
+          height: 1900,
+          confirmations: 100,
+          time: DateTime(2026, 10, 2),
+          subaddresses: {0},
+        ),
+        Transfer(
+          incoming: false,
+          amount: 1200000000000,
+          height: 1500,
+          confirmations: 500,
+          time: DateTime(2026, 9, 30),
+          fee: 31200000,
+          hash: '3' * 64,
+        ),
+      ];
+    await phone(tester);
+    await tester.pumpWidget(MainApp(home: HomeScreen(session)));
+    expect(find.text('2.5000 XMR'), findsOne);
+    expect(find.textContaining('1.5000 unlocked'), findsOne);
+    expect(find.text('+1.0000'), findsOne);
+    expect(find.text('−1.2000'), findsOne);
+
+    await tester.tap(find.byTooltip('Hide balance'));
+    await tester.pump();
+    expect(session.hideAmounts, isTrue);
+    expect(find.textContaining('2.5000'), findsNothing);
+    expect(shown('$hiddenAmount XMR'), findsOne);
+    expect(find.text('$hiddenAmount unlocked'), findsOne);
+    expect(find.text(hiddenAmount), findsNWidgets(2));
+    expect(find.textContaining('1.0000'), findsNothing);
+    expect(find.bySemanticsLabel(RegExp('Balance hidden')), findsOne);
+    expect(find.byTooltip('Show balance'), findsOne);
+
+    // The transaction screen follows, the fee too.
+    await tester.tap(find.text('30 Sep 2026 · found via key images'));
+    await tester.pumpAndSettle();
+    expect(shown('$hiddenAmount XMR'), findsOne);
+    expect(find.bySemanticsLabel(RegExp('Amount hidden')), findsOne);
+    expect(find.text(hiddenAmount), findsOne, reason: 'the fee');
+    expect(find.textContaining('1.2000'), findsNothing);
+    expect(find.text('0.0000312'), findsNothing);
+    await tester.tap(find.text('Back'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('Show balance'));
+    await tester.pump();
+    expect(session.hideAmounts, isFalse);
+    expect(find.text('2.5000 XMR'), findsOne);
+    expect(find.text('+1.0000'), findsOne);
+
+    semantics.dispose();
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('Home opens in the currency last chosen', (tester) async {
+    usdPrice.fetch = () async => 200; // a made-up price
+    usdPrice.on = true;
+    addTearDown(() {
+      usdPrice.on = false;
+      usdPrice.fetch = fetchXmrUsd;
+    });
+    final session = synced()
+      ..balance = 2500000000000
+      ..unlocked = 1500000000000
+      ..showUsd = true;
+    await phone(tester);
+    await tester.pumpWidget(MainApp(home: HomeScreen(session)));
+    await tester.pump();
+    expect(find.text('500.00 USD'), findsOne);
+    expect(find.text('tap for XMR'), findsOne);
+
+    await tester.tap(find.text('500.00 USD'));
+    await tester.pump();
+    expect(find.text('2.5000 XMR'), findsOne);
+    expect(session.showUsd, isFalse);
+
+    // With the price lookup off, XMR, also once it is on again.
+    await tester.tap(find.text('2.5000 XMR'));
+    await tester.pump();
+    expect(session.showUsd, isTrue);
+    usdPrice.on = false;
+    await tester.pump();
+    expect(find.text('2.5000 XMR'), findsOne);
+    expect(session.showUsd, isFalse);
+    usdPrice.on = true;
+    await tester.pump();
+    expect(find.text('2.5000 XMR'), findsOne);
+    usdPrice.on = false; // stops the refresh timer before the test ends
+
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  test(
+    'the wallet keeps the currency and hidden amounts in its file',
+    () async {
+      final wallet = watch();
+      addTearDown(wallet.close);
+      final first = WalletSession(wallet);
+      expect(first.showUsd, isFalse);
+      expect(first.hideAmounts, isFalse);
+      await first.setShowUsd(true);
+      await first.setHideAmounts(true);
+      final next = WalletSession(wallet);
+      expect(next.showUsd, isTrue);
+      expect(next.hideAmounts, isTrue);
+      await next.setShowUsd(false);
+      await next.setHideAmounts(false);
+      expect(WalletSession(wallet).showUsd, isFalse);
+      expect(WalletSession(wallet).hideAmounts, isFalse);
+    },
+  );
 
   testWidgets('Home says which address each payment went to', (tester) async {
     final session = synced();

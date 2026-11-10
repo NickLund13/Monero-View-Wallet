@@ -72,6 +72,10 @@ and Dark.
 
 ### Layout
 
+- Phones show the app upright only, on iPhone and Android (the owner decided
+  on 2026-11-10): every screen is drawn for that shape. iPad keeps turning,
+  as its Split View needs, and Android 16 lets tablets and foldables turn it
+  too, so every screen still scrolls where it doesn't fit.
 - Screen side padding 20; content starts below the status bar.
 - Cards: radius 16, horizontal padding 16, rows at least 50 tall with
   `border` dividers.
@@ -412,7 +416,18 @@ first" shows the node's height instead.
   for USD" caption sits above the amount. If the latest price request failed,
   the line adds "as of HH:MM" (the time of the price shown); with no price
   yet it says "Getting the XMR price…" or "Can't reach Kraken for the XMR
-  price." Switching to USD after a failure asks again at once.
+  price." Switching to USD after a failure asks again at once. The choice is
+  kept inside the encrypted wallet file, so Home opens in the currency last
+  shown (the owner asked on 2026-11-10). Turning the lookup off goes back to
+  XMR, and Home stays in XMR when it is turned on again.
+- An eye button (44 × 44, `muted`) at the right of the balance hides every
+  amount, for a phone others can see (the owner asked on 2026-11-10): the
+  balance, the unlocked line, the Activity amounts, and on Transaction the
+  amount and fee, show as "••••", and the currency stays. Tapping it again
+  shows them. Its tooltip says "Hide balance" or "Show balance", and screen
+  readers hear "hidden" rather than the dots. Kept inside the encrypted
+  wallet file, so the amounts stay hidden at the next launch. A rescan's
+  "Received so far" follows it too.
 - Sync line, one of:
   - Synced: green dot, "Synced to block N · N min ago".
   - Catching up: amber dot, "Catching up · N blocks to go" and a thin
@@ -464,6 +479,7 @@ first" shows the node's height instead.
   "None yet" and "Not in a block yet".
 - For spends: "Found through imported key images. A view-only wallet can't
   see who you paid, only what left this wallet."
+- With Home's eye button on, the amount and the fee show as "••••".
 
 ### 10. Settings
 
