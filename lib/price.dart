@@ -136,6 +136,7 @@ class UsdPrice extends ChangeNotifier {
     if (value == _on) return;
     _on = value;
     _turn++;
+    _stopWaiting();
     _timer?.cancel();
     _timer = null;
     _asking = false;
@@ -153,10 +154,28 @@ class UsdPrice extends ChangeNotifier {
   /// True while a request is out.
   bool get asking => _asking;
 
+  /// True while the price can't be asked for because the app's Tor, which
+  /// the request has to go through, isn't connected yet: after a launch with
+  /// Tor on that takes a moment, and isn't the price source failing.
+  bool get waitingForTor =>
+      _on &&
+      torProxy != null &&
+      !builtInTor.ready &&
+      (perXmr == null || failed);
+
+  /// The Tor [refresh] waits for, and what it does once Tor is ready.
+  BuiltInTor? _waitingOn;
+  VoidCallback? _whenReady;
+
   /// Asks for the price now, unless the switch is off or a request is already
-  /// out.
+  /// out. With Tor on but not connected yet, asks once it is.
   Future<void> refresh() async {
     if (!_on || _asking) return;
+    if (torProxy != null && !builtInTor.ready) {
+      _waitForTor();
+      return;
+    }
+    _stopWaiting();
     final turn = _turn;
     _asking = true;
     notifyListeners();
@@ -174,6 +193,24 @@ class UsdPrice extends ChangeNotifier {
       _asking = false;
       notifyListeners();
     }
+  }
+
+  void _waitForTor() {
+    if (_waitingOn != null) return;
+    final tor = _waitingOn = builtInTor;
+    void ready() {
+      if (!tor.ready) return;
+      _stopWaiting();
+      refresh();
+    }
+
+    tor.addListener(_whenReady = ready);
+    notifyListeners();
+  }
+
+  void _stopWaiting() {
+    _waitingOn?.removeListener(_whenReady!);
+    _waitingOn = _whenReady = null;
   }
 }
 

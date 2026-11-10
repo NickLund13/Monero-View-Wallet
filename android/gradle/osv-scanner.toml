@@ -59,3 +59,10 @@ name = "org.jetbrains.kotlin:kotlin-gradle-plugin"
 ecosystem = "Maven"
 vulnerability.ignore = true
 reason = "Build tool only: the Kotlin Gradle plugin, which compiles the app's Kotlin code and isn't in the app."
+
+# The app has only Guava's separate listenablefuture 1.0, which stays checked.
+[[PackageOverrides]]
+name = "com.google.guava:guava"
+ecosystem = "Maven"
+vulnerability.ignore = true
+reason = "Build tool only: comes with the Android or Kotlin Gradle plugin, not in the app."

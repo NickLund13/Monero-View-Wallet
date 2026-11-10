@@ -242,14 +242,21 @@ class _Row extends StatelessWidget {
           ? Border(top: BorderSide(color: context.colors.border))
           : null,
     ),
-    child: Row(
-      children: [
-        Text(label, style: context.body),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Align(alignment: Alignment.centerRight, child: value),
-        ),
-      ],
+    // The label takes at most half the row: with the largest text sizes it
+    // wraps rather than pushing the value off the screen.
+    child: LayoutBuilder(
+      builder: (context, constraints) => Row(
+        children: [
+          ConstrainedBox(
+            constraints: BoxConstraints(maxWidth: constraints.maxWidth / 2),
+            child: Text(label, style: context.body),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Align(alignment: Alignment.centerRight, child: value),
+          ),
+        ],
+      ),
     ),
   );
 }

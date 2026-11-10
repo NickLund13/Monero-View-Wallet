@@ -234,6 +234,17 @@ void main() {
     expect(nodeProblem('http://node.example.org:38089'), contains('host:port'));
     expect(nodeProblem('node.example.org:99999'), contains('host:port'));
     expect(nodeProblem('user:pass@node.example.org:1'), contains('host:port'));
+    // As a node's address is often copied, with the field's spaces.
+    expect(
+      cleanNode(' https://node.example.org:18089/ '),
+      'node.example.org:18089',
+    );
+    expect(cleanNode('HTTP://192.168.1.20:18081'), '192.168.1.20:18081');
+    expect(cleanNode('node.example.org:18089'), 'node.example.org:18089');
+    expect(
+      nodeProblem(cleanNode('https://user:pass@node.example.org:1/')),
+      contains('host:port'),
+    );
     expect(nodeProblem('${'a' * 56}.onion:38081'), isNull);
     // A name with the root's dot after it, or an empty label.
     expect(nodeProblem('node.example.org.:38089'), contains('host:port'));
@@ -1285,24 +1296,45 @@ void main() {
       final fake = builtInTor = _FakeTor();
       addTearDown(() => builtInTor = real);
       await phone(tester);
-      await tester.pumpWidget(
-        MainApp(
-          home: HomeScreen(_OnNode(watch(full), stagenetNode, tor: torAddress)),
-        ),
-      );
+      // The node can't be asked until Tor is connected, so it reads as
+      // unreachable meanwhile, as after a launch.
+      final session = _OnNode(watch(full), stagenetNode, tor: torAddress)
+        ..reachable = false;
+      await tester.pumpWidget(MainApp(home: HomeScreen(session)));
       expect(find.text('Scanning the blockchain'), findsOne);
       expect(find.text('Connecting… 0%'), findsOne);
+      // Waiting for Tor isn't the node failing.
+      expect(find.textContaining("Can't reach your node"), findsNothing);
+      expect(
+        find.text(
+          'Connecting to Tor… 0%. The scan continues once it connects.',
+        ),
+        findsOne,
+      );
       fake
         ..progress = 100
         ..notifyListeners();
       await tester.pump();
       expect(find.text('Connected'), findsOne);
+      expect(
+        find.text("Can't reach your node. The scan continues when it answers."),
+        findsOne,
+        reason: 'Tor is up, and the node still not answering',
+      );
       fake
         ..progress = 0
         ..error = 'Tor stopped before it connected.'
         ..notifyListeners();
       await tester.pump();
       expect(find.text('Not running'), findsOne);
+      expect(
+        find.text(
+          'Tor stopped before it connected. '
+          "Your node can't be reached without Tor.",
+        ),
+        findsOne,
+      );
+      expect(find.text('Change node'), findsOne);
 
       // Without Tor the row is not there.
       await tester.pumpWidget(const SizedBox());
@@ -1392,9 +1424,10 @@ void main() {
     await tester.pump();
     expect(find.textContaining('host:port'), findsOne);
     expect(enabled(tester, 'Add'), isFalse);
+    // Pasted as a link: it is added as host:port.
     await tester.enterText(
       find.byKey(const Key('addNode')),
-      'new.example:38089',
+      'https://new.example:38089/',
     );
     await tester.pump();
     await tester.tap(find.text('Add'));
@@ -2890,6 +2923,22 @@ void main() {
     expect(WalletSession(wallet).lastImport, isNull);
     await wallet.save({'mvw.lastImport': 'not json'});
     expect(WalletSession(wallet).lastImport, isNull);
+  });
+
+  test('a dismissed key images notice stays away after a restart, until '
+      'another output arrives', () async {
+    final wallet = watch(full);
+    addTearDown(wallet.close);
+    const three = (total: 3, spent: 0, withoutKeyImage: 3); // made up
+    final first = WalletSession(wallet)..outputs = three;
+    expect(first.showKeyImagesNotice, isTrue);
+    first.dismissKeyImagesNotice();
+    await first.save();
+
+    final second = WalletSession(wallet)..outputs = three;
+    expect(second.showKeyImagesNotice, isFalse);
+    second.outputs = (total: 4, spent: 0, withoutKeyImage: 4);
+    expect(second.showKeyImagesNotice, isTrue);
   });
 
   test('the wallet keeps the lock choice, on until turned off', () async {

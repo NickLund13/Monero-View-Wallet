@@ -303,6 +303,30 @@ void main() {
     expect(check.asked, [false], reason: 'Face ID, now it answers');
   });
 
+  for (final (screen, size, text) in [
+    ('an iPhone on its side', const Size(667, 375), 1.0),
+    ('a phone with the largest text', const Size(360, 667), 2.0),
+  ]) {
+    testWidgets('the unlock buttons can be reached on $screen', (tester) async {
+      tester.view
+        ..physicalSize = size
+        ..devicePixelRatio = 1;
+      tester.platformDispatcher.textScaleFactorTestValue = text;
+      addTearDown(tester.view.reset);
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+      await appLock.start(on: true);
+      await showApp(tester);
+      expect(tester.takeException(), isNull, reason: 'nothing cut off');
+
+      await tester.ensureVisible(find.text('Use passcode'));
+      await tester.pump();
+      check.answers.add(CheckResult.ok);
+      await tester.tap(find.text('Unlock with Face ID'));
+      await tester.pump();
+      expect(locked(), isFalse);
+    });
+  }
+
   test('turning the lock off needs the owner', () async {
     check.answers.addAll([CheckResult.cancelled, CheckResult.ok]);
     expect(await appLock.confirm(), isFalse);

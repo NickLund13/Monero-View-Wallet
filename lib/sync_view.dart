@@ -103,7 +103,13 @@ class _SyncViewState extends State<SyncView> {
             Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                StatusDot(s.reachable ? c.green : c.red),
+                StatusDot(
+                  s.reachable
+                      ? c.green
+                      : s.tor != null && !builtInTor.ready
+                      ? c.amber
+                      : c.red,
+                ),
                 Flexible(
                   child: Text(
                     s.node,
@@ -131,26 +137,53 @@ class _SyncViewState extends State<SyncView> {
               ),
             ),
         ]),
-        if (!s.reachable)
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  "Can't reach your node. The scan continues when it answers.",
-                  style: context.caption.copyWith(color: c.red),
-                ),
-              ),
-              TextButton(
-                onPressed: widget.onChangeNode,
-                child: const Text('Change node'),
-              ),
-            ],
-          ),
+        ListenableBuilder(
+          listenable: builtInTor,
+          builder: (context, _) => _nodeProblem(context),
+        ),
         const SizedBox(height: 8),
         Text(
           "Spends don't show yet: the app can only see them once you import "
           'key images. It asks for them when the scan finishes.',
           style: context.body,
+        ),
+      ],
+    );
+  }
+
+  /// Why the scan is waiting, with a way to another node, or nothing. With
+  /// Tor on, the node can't be asked until the app's Tor is connected, which
+  /// after a launch takes a moment: that isn't the node failing.
+  Widget _nodeProblem(BuildContext context) {
+    final s = widget.session;
+    final c = context.colors;
+    final String problem;
+    var red = true;
+    if (s.tor != null && !builtInTor.ready) {
+      final error = builtInTor.error;
+      red = error != null;
+      problem = error == null
+          ? 'Connecting to Tor… ${builtInTor.progress}%. The scan continues '
+                'once it connects.'
+          : "$error Your node can't be reached without Tor.";
+    } else if (!s.reachable) {
+      problem = "Can't reach your node. The scan continues when it answers.";
+    } else {
+      return const SizedBox.shrink();
+    }
+    return Row(
+      children: [
+        Expanded(
+          child: Text(
+            problem,
+            style: red
+                ? context.caption.copyWith(color: c.red)
+                : context.caption,
+          ),
+        ),
+        TextButton(
+          onPressed: widget.onChangeNode,
+          child: const Text('Change node'),
         ),
       ],
     );
@@ -163,7 +196,8 @@ class _Pace {
   final _watch = Stopwatch();
   int _first = 0;
 
-  /// "About 4 min left", or null until there are five seconds to judge by.
+  /// "About 4 min left" or "About 2 h 5 min left", or null until there are
+  /// five seconds to judge by.
   String? left(int done, int total) {
     if (done == 0) return null;
     if (!_watch.isRunning) {
@@ -176,6 +210,6 @@ class _Pace {
     final left = (total - done) * seconds ~/ gained;
     return left < 60
         ? 'Less than a minute left'
-        : 'About ${(left / 60).ceil()} min left';
+        : 'About ${minutesAndHours((left / 60).ceil())} left';
   }
 }

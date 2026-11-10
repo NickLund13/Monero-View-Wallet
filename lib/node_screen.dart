@@ -58,6 +58,15 @@ String? nodeProblem(String input) {
   return null;
 }
 
+/// [input] as the node to use: without spaces around it, and without the
+/// http:// or https:// in front or the slash after that a node's address is
+/// often copied with. The wallet library uses TLS by itself whenever the node
+/// offers it, so the scheme changes nothing.
+String cleanNode(String input) => input
+    .trim()
+    .replaceFirst(RegExp('^https?://', caseSensitive: false), '')
+    .replaceFirst(RegExp(r'/+$'), '');
+
 /// How Test and Test speed ask a node for its height. Tests replace it.
 Future<({int height, int ms})> Function(String node, {String? tor}) askNode =
     ViewWallet.probeNode;
@@ -193,12 +202,12 @@ class _NodeScreenState extends State<NodeScreen> {
     super.dispose();
   }
 
-  String get _ownNode => _own.text.trim();
+  String get _ownNode => cleanNode(_own.text);
   String? get _ownProblem => _ownNode.isEmpty ? null : nodeProblem(_ownNode);
   String? get _node =>
       _public ?? (nodeProblem(_ownNode) == null ? _ownNode : null);
 
-  String get _addingNode => _adding.text.trim();
+  String get _addingNode => cleanNode(_adding.text);
 
   /// Keeps a seed phrase or a private key pasted into a node field out of it.
   late final _refuseSecrets = RefuseSecrets(

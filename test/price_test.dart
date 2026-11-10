@@ -6,6 +6,7 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:monero_view_wallet/price.dart';
+import 'package:monero_view_wallet/tor.dart';
 
 /// Kraken's answer for the XMR/USD ticker, cut down to the fields the app
 /// reads, with a made-up price.
@@ -188,6 +189,52 @@ void main() {
       await tester.pump(const Duration(seconds: 5));
       expect(price.perXmr, isNull);
       expect(price.asking, isFalse);
+    });
+
+    testWidgets('with Tor on, waits for Tor to connect instead of failing', (
+      tester,
+    ) async {
+      // As at a launch with Tor on: the lookup starts before the app's Tor
+      // has connected, and nothing may be asked until it has.
+      final real = builtInTor;
+      final tor = builtInTor = BuiltInTor();
+      torProxy = torAddress;
+      addTearDown(() {
+        builtInTor = real;
+        torProxy = null;
+      });
+      final price = UsdPrice();
+      var asked = 0;
+      price.fetch = () async {
+        asked++;
+        return 200;
+      };
+      price.on = true;
+      await tester.pump();
+      expect(asked, 0);
+      expect(price.failed, isFalse, reason: 'Kraken never failed');
+      expect(price.waitingForTor, isTrue);
+
+      tor
+        ..progress = 100
+        ..notifyListeners();
+      await tester.pump();
+      expect(asked, 1, reason: 'asked as soon as Tor is connected');
+      expect(price.perXmr, 200);
+      expect(price.waitingForTor, isFalse);
+
+      // Turned off while it waits: nothing is asked once Tor connects.
+      price.on = false;
+      tor
+        ..progress = 0
+        ..notifyListeners();
+      price.on = true;
+      price.on = false;
+      tor
+        ..progress = 100
+        ..notifyListeners();
+      await tester.pump();
+      expect(asked, 1);
     });
   });
 }

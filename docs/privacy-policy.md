@@ -1,6 +1,6 @@
 # Monero View privacy policy
 
-Last updated: 10 October 2026
+Last updated: 10 November 2026
 
 Monero View is a view-only Monero wallet for iPhone. It shows a wallet's balance and history from the wallet's address and secret view key, and the key images you export from the Monero GUI or a signing device. This policy says what the app keeps, what it sends and to whom, and how to delete it.
 
@@ -15,7 +15,7 @@ Monero View is a view-only Monero wallet for iPhone. It shows a wallet's balance
 
 All of it stays in the app's own storage on the iPhone, which other apps can't read.
 
-- **Your wallet:** its address and secret view key, and what the app finds on the blockchain for it: payments received, imported key images, spends, the balance and the history. With it are the subaddresses made on Receive and their labels, the wallet's name, its restore height and subaddress lookahead, the node you chose and the public nodes you added, whether you use Tor, when the node last answered, the time, file name (or that it came by QR code) and counts of the last key images import, and your Face ID to open and Test speed settings. All of this is in the wallet's two files, which are encrypted with a password the app makes at random.
+- **Your wallet:** its address and secret view key, and what the app finds on the blockchain for it: payments received, imported key images, spends, the balance and the history. With it are the subaddresses made on Receive and their labels, the wallet's name, its restore height and subaddress lookahead, the node you chose and the public nodes you added, whether you use Tor, when the node last answered, the time, file name (or that it came by QR code) and counts of the last key images import, whether you dismissed the key images notice on Home, and your Face ID to open and Test speed settings. All of this is in the wallet's two files, which are encrypted with a password the app makes at random.
 - **That password,** in the iPhone's Keychain. Only this app can read it, only while the iPhone is unlocked, and only on this iPhone: it is not synced to iCloud Keychain and does not move to another phone with a backup. You never see or type it.
 - **Two display choices,** Appearance (System, Light or Dark) and Show USD value (on or off), each kept as one word in a plain file. They say nothing about the wallet.
 - **Monero's ring database.** Once you import key images, the wallet library records there the ring of each spend it sees, encrypted with a key made from the view key.

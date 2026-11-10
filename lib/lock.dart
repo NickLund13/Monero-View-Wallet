@@ -22,6 +22,7 @@ library;
 
 import 'dart:async';
 import 'dart:io';
+import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -413,84 +414,100 @@ class LockScreen extends StatelessWidget {
   );
 
   Widget _screen(BuildContext context) {
+    return Scaffold(
+      body: SafeArea(
+        // Scrolls when it doesn't fit, as on an iPhone on its side or with the
+        // largest text sizes: the Unlock button must never be cut off.
+        child: LayoutBuilder(
+          builder: (context, constraints) => SingleChildScrollView(
+            child: ConstrainedBox(
+              constraints: BoxConstraints(minHeight: constraints.maxHeight),
+              child: IntrinsicHeight(
+                child: _content(context, width: constraints.maxWidth),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// The screen's content, [width] wide.
+  Widget _content(BuildContext context, {required double width}) {
     final c = context.colors;
     final lock = appLock;
     final biometric = lock.kind.biometric;
     final problem = lock.problem;
-    return Scaffold(
-      body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 48, 20, 28),
-          child: Column(
-            children: [
-              const Spacer(flex: 5),
-              Container(
-                width: 88,
-                height: 88,
-                decoration: BoxDecoration(
-                  color: c.card,
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(Icons.lock_outline, size: 38, color: c.accentText),
-              ),
-              const SizedBox(height: 24),
-              Semantics(
-                header: true,
-                child: const Text(
-                  'Wallet locked',
-                  style: TextStyle(fontSize: 26, fontWeight: FontWeight.w600),
-                ),
-              ),
-              const SizedBox(height: 16),
-              ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 280),
-                child: Text(
-                  'Unlock to see your balance and history. The app locks '
-                  'again after a minute in the background.',
-                  textAlign: TextAlign.center,
-                  style: context.body,
-                ),
-              ),
-              if (problem != null)
-                Padding(
-                  padding: const EdgeInsets.only(top: 16),
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 280),
-                    child: Text(
-                      problem,
-                      textAlign: TextAlign.center,
-                      style: context.caption.copyWith(color: c.red),
-                    ),
-                  ),
-                ),
-              const Spacer(flex: 7),
-              FilledButton.icon(
-                onPressed: lock.asking ? null : lock.unlock,
-                icon: Icon(switch (lock.kind) {
-                  Unlock.faceId || Unlock.face => Icons.face_unlock_outlined,
-                  Unlock.touchId ||
-                  Unlock.fingerprint ||
-                  Unlock.fingerprintOrFace => Icons.fingerprint,
-                  _ => Icons.dialpad,
-                }, size: 20),
-                label: Text(
-                  'Unlock with '
-                  '${biometric ? lock.kind.inSentence : lock.kind.fallback}',
-                ),
-              ),
-              const SizedBox(height: 8),
-              if (biometric)
-                TextButton(
-                  onPressed: lock.asking
-                      ? null
-                      : () => lock.unlock(passcode: true),
-                  child: Text('Use ${lock.kind.fallback}'),
-                )
-              else
-                const SizedBox(height: 44),
-            ],
+    // Text at most 280 wide, centred. Padding rather than a maximum width,
+    // whose height IntrinsicHeight would work out at the full width, with
+    // fewer lines than are shown.
+    Widget narrow(Widget text) => Padding(
+      padding: EdgeInsets.symmetric(horizontal: max(0, (width - 40 - 280) / 2)),
+      child: text,
+    );
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 48, 20, 28),
+      child: Column(
+        children: [
+          const Spacer(flex: 5),
+          Container(
+            width: 88,
+            height: 88,
+            decoration: BoxDecoration(color: c.card, shape: BoxShape.circle),
+            child: Icon(Icons.lock_outline, size: 38, color: c.accentText),
           ),
-        ),
+          const SizedBox(height: 24),
+          Semantics(
+            header: true,
+            child: const Text(
+              'Wallet locked',
+              style: TextStyle(fontSize: 26, fontWeight: FontWeight.w600),
+            ),
+          ),
+          const SizedBox(height: 16),
+          narrow(
+            Text(
+              'Unlock to see your balance and history. The app locks '
+              'again after a minute in the background.',
+              textAlign: TextAlign.center,
+              style: context.body,
+            ),
+          ),
+          if (problem != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 16),
+              child: narrow(
+                Text(
+                  problem,
+                  textAlign: TextAlign.center,
+                  style: context.caption.copyWith(color: c.red),
+                ),
+              ),
+            ),
+          const Spacer(flex: 7),
+          FilledButton.icon(
+            onPressed: lock.asking ? null : lock.unlock,
+            icon: Icon(switch (lock.kind) {
+              Unlock.faceId || Unlock.face => Icons.face_unlock_outlined,
+              Unlock.touchId ||
+              Unlock.fingerprint ||
+              Unlock.fingerprintOrFace => Icons.fingerprint,
+              _ => Icons.dialpad,
+            }, size: 20),
+            label: Text(
+              'Unlock with '
+              '${biometric ? lock.kind.inSentence : lock.kind.fallback}',
+            ),
+          ),
+          const SizedBox(height: 8),
+          if (biometric)
+            TextButton(
+              onPressed: lock.asking ? null : () => lock.unlock(passcode: true),
+              child: Text('Use ${lock.kind.fallback}'),
+            )
+          else
+            const SizedBox(height: 44),
+        ],
       ),
     );
   }

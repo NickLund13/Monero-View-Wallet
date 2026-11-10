@@ -18,11 +18,10 @@ abstract interface class SecretStore {
   void delete(String name);
 }
 
-/// The store the app uses: Credential Manager on Windows, and the Keychain
-/// (keychain.dart), which main() picks, on iPhone. A variable so a test can
-/// stand in for it where there is neither.
-// ponytail: Android has no store yet. It needs the Keystore before its build
-// can save the wallet.
+/// The store the app uses: Credential Manager on Windows, and on phones the
+/// one main() picks: the Keychain (keychain.dart) on iPhone, the Keystore
+/// (android_keystore.dart) on Android. A variable so a test can stand in for
+/// it where there is none.
 SecretStore secretStore = const CredentialManager();
 
 /// Windows Credential Manager, called directly so the app needs no plugin.

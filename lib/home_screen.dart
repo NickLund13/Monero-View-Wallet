@@ -381,7 +381,9 @@ class _HomeScreenState extends State<HomeScreen> {
       );
     } else {
       below = Text(
-        usdPrice.failed
+        usdPrice.waitingForTor
+            ? 'Getting the XMR price once Tor connects…'
+            : usdPrice.failed
             ? "Can't reach Kraken for the XMR price."
             : 'Getting the XMR price…',
         style: context.caption,
@@ -418,9 +420,12 @@ class _HomeScreenState extends State<HomeScreen> {
                 const SizedBox(width: 6),
                 Icon(Icons.swap_horiz, size: 16, color: c.muted),
                 const SizedBox(width: 4),
-                Text(
-                  usd ? 'tap for XMR' : 'tap for USD',
-                  style: context.caption,
+                // Wraps with the largest text sizes rather than running off.
+                Flexible(
+                  child: Text(
+                    usd ? 'tap for XMR' : 'tap for USD',
+                    style: context.caption,
+                  ),
                 ),
               ],
             ),
@@ -508,7 +513,7 @@ class _HomeScreenState extends State<HomeScreen> {
         Expanded(
           child: Text(
             'Synced to block ${_s.height} · '
-            '${minutes < 1 ? 'just now' : '$minutes min ago'}',
+            '${minutes < 1 ? 'just now' : '${minutesAndHours(minutes)} ago'}',
             style: context.caption,
           ),
         ),
