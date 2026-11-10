@@ -4,7 +4,7 @@
 # release APK: the wallet library and tor are in it for each kind of
 # processor, its native libraries suit phones with 16 KB memory pages, it asks
 # for no permission but the internet, the camera and the lock's fingerprint or
-# face check, and Android may not back it up.
+# face check, Android may not back it up, and it stays upright.
 # Then it runs a smoke test on the Android emulator, on the oldest Android the
 # app supports and on a recent one, both without Google's apps or services:
 # tool/android_smoke.dart calls the wallet library with obviously fake input,

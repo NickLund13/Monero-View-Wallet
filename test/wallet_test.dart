@@ -2581,6 +2581,7 @@ void main() {
     expect(find.textContaining('2.5000'), findsOne);
     expect(find.text('tap for USD'), findsOne);
     expect(usdPrice.perXmr, isNull);
+    expect(session.showUsd, isFalse, reason: 'kept with the wallet');
 
     // Saying yes on Home turns the lookup on, as the Settings switch does,
     // and shows USD straight away.
@@ -2596,6 +2597,7 @@ void main() {
     expect(asked, 2);
     expect(find.text('500.00 USD'), findsOne);
     expect(find.text('tap for XMR'), findsOne);
+    expect(session.showUsd, isTrue);
     usdPrice.on = false; // stops the refresh timer before the test ends
 
     // Taking the screen away closes the wallet.

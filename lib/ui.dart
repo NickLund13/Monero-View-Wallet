@@ -460,6 +460,9 @@ String minutesAndHours(int minutes) {
   return '${minutes ~/ 60} h${rest == 0 ? '' : ' $rest min'}';
 }
 
+/// What an amount shows while Home's eye button hides amounts.
+const hiddenAmount = '••••';
+
 /// "1 output", "3 outputs"
 String plural(int n, String noun) => '$n $noun${n == 1 ? '' : 's'}';
 

@@ -95,7 +95,12 @@ class _SyncViewState extends State<SyncView> {
         FactsCard([
           (
             'Received so far',
-            Text('${formatXmr(s.balance)} XMR', style: mono()),
+            // Hidden during a rescan if Home's eye button hid the amounts.
+            Text(
+              '${s.hideAmounts ? hiddenAmount : formatXmr(s.balance)} XMR',
+              semanticsLabel: s.hideAmounts ? 'Hidden' : null,
+              style: mono(),
+            ),
           ),
           ('Outputs found', Text('${s.outputs.total}', style: mono())),
           (
