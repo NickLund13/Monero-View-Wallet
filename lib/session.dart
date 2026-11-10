@@ -15,6 +15,15 @@ import 'wallet.dart';
 /// Blocks before a received output can be spent.
 const unlockBlocks = 10;
 
+/// How many polls in a row the node may leave unanswered before the screens
+/// say it can't be reached: ten seconds' worth, and thirty through Tor, which
+/// takes longer to reach a node. Until then they say the app is connecting.
+/// wallet2 has no answer right after a saved wallet is opened, or while it
+/// connects again after the app was in the background or the network
+/// changed, and that isn't the node failing.
+const unansweredPolls = 5;
+const unansweredPollsOverTor = 15;
+
 /// While blocks are being scanned, the wallet is saved this often, and Home
 /// saves it whenever the app loses focus: on a phone the system can end an app
 /// in the background without warning. Closing the Windows app loses up to
@@ -129,7 +138,18 @@ class WalletSession extends ChangeNotifier {
   /// Height scanned so far, and the node's height when it last answered.
   int height = 0;
   int nodeHeight = 0;
+
+  /// False once the node has left [unansweredPolls] polls in a row unanswered,
+  /// and while the wallet waits for the app's Tor, which the screens then
+  /// show instead.
   bool reachable = true;
+
+  /// How many polls in a row the node has left unanswered.
+  int _unanswered = 0;
+
+  /// True while the node has yet to answer, or to answer again, and it is too
+  /// soon to say it can't be reached.
+  bool get connecting => reachable && _unanswered > 0;
 
   /// True once the wallet has caught up with the node since it was opened.
   bool synced = false;
@@ -278,14 +298,25 @@ class WalletSession extends ChangeNotifier {
     if (tor != null && _polls++ % 8 == 0) builtInTor.start().ignore();
     wallet.followTor();
     try {
+      // Nothing is asked of the node until the app's Tor is connected.
+      final waitingForTor = tor != null && !builtInTor.ready;
       final tip = await wallet.nodeHeight();
       // Don't read the wallet while an import or a rescan is changing it.
       if (importing || rescanning || _closed) return;
       final now = DateTime.now();
-      reachable = tip > 0;
-      if (reachable) {
+      if (tip > 0) {
+        reachable = true;
+        _unanswered = 0;
         nodeHeight = tip;
         lastContact = now;
+      } else if (waitingForTor) {
+        reachable = false;
+        _unanswered = 0;
+      } else {
+        _unanswered++;
+        reachable =
+            _unanswered <
+            (tor == null ? unansweredPolls : unansweredPollsOverTor);
       }
       final before = height;
       _readWallet();

@@ -44,6 +44,7 @@ import 'package:monero_view_wallet/ur.dart';
 import 'package:monero_view_wallet/wallet.dart';
 
 import 'fake_check.dart';
+import 'fake_node.dart';
 
 void main() {
   final node = Platform.environment['MVW_STAGENET_NODE'];
@@ -2468,6 +2469,15 @@ void main() {
     expect(find.text('Public node · connected · 42 ms'), findsOne);
     expect(asked, [node]);
     expect(find.text('1234'), findsOne);
+    // A node slow to answer again isn't one that can't be reached.
+    session.connecting = true;
+    session.dismissKeyImagesNotice(); // any change redraws the screens
+    await tester.pump();
+    expect(find.text('Public node · connecting…'), findsOne);
+    session.connecting = false;
+    session.dismissKeyImagesNotice();
+    await tester.pump();
+    expect(find.text('Public node · connected · 42 ms'), findsOne);
 
     final semantics = tester.ensureSemantics();
     expect(
@@ -2761,6 +2771,47 @@ void main() {
     },
   );
 
+  test(
+    'removing a wallet makes it unreadable before a slow close ends',
+    () async {
+      final dir = Directory.systemTemp.createTempSync('mvw_test');
+      walletFile = '${dir.path}${Platform.pathSeparator}wallet';
+      final passwordName = 'Monero View Wallet: $walletFile';
+      addTearDown(() {
+        ViewWallet.forgetSaved();
+        walletFile = null;
+        dir.deleteSync(recursive: true);
+      });
+      final node = await FakeNode.start(
+        height: approximateHeight(Network.stagenet),
+      );
+      addTearDown(node.close);
+
+      final wallet = watchSaved(full);
+      addTearDown(wallet.close);
+      await wallet.connect(node.address);
+      bool hasPassword() => secretStore.read(passwordName) != null;
+      expect(hasPassword(), isTrue);
+      expect(File('$walletFile.keys').existsSync(), isTrue);
+
+      // A node slow to answer, as over Tor: closing the wallet waits for the
+      // request its sync thread is in the middle of.
+      node.delay = const Duration(seconds: 2);
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+      final removed = wallet.forget();
+      // If the app is closed now, the next launch finds no wallet to open.
+      expect(hasPassword(), isFalse);
+      expect(ViewWallet.openSaved(), isNull);
+      // Windows won't delete a keys file that is open: there it goes once the
+      // wallet has closed.
+      if (!Platform.isWindows) expect(ViewWallet.savedButUnreadable, isFalse);
+
+      await removed;
+      expect(dir.listSync(), isEmpty);
+      expect(hasPassword(), isFalse);
+    },
+  );
+
   test('opens the saved wallet again without the keys', () async {
     final dir = Directory.systemTemp.createTempSync('mvw_test');
     walletFile = '${dir.path}${Platform.pathSeparator}wallet';
@@ -2838,6 +2889,68 @@ void main() {
     secretStore.delete(passwordName);
     expect(ViewWallet.openSaved(), isNull);
     expect(ViewWallet.savedButUnreadable, isTrue);
+  });
+
+  test('a saved wallet opened again is connecting, not unreachable', () async {
+    final dir = Directory.systemTemp.createTempSync('mvw_test');
+    walletFile = '${dir.path}${Platform.pathSeparator}wallet';
+    addTearDown(() {
+      ViewWallet.forgetSaved();
+      walletFile = null;
+      dir.deleteSync(recursive: true);
+    });
+    final node = await FakeNode.start(
+      height: approximateHeight(Network.stagenet),
+    );
+    addTearDown(node.close);
+
+    // Setup asks the node before the session starts, so the first poll has
+    // its answer.
+    var wallet = watchSaved(full);
+    addTearDown(() => wallet.close());
+    expect(await wallet.connect(node.address), node.height);
+    var session = WalletSession(wallet);
+    await session.refresh();
+    expect(session.reachable, isTrue);
+    expect(session.connecting, isFalse);
+    expect(session.nodeHeight, node.height);
+    await wallet.close();
+
+    // At the next launch wallet2 connects by itself, and a node far away
+    // takes a moment to answer: the first poll comes before that. That isn't
+    // "Can't reach your node".
+    node.delay = const Duration(seconds: 1);
+    final connectionsBefore = node.connections;
+    wallet = ViewWallet.openSaved()!;
+    session = WalletSession(wallet);
+    await session.refresh();
+    expect(session.nodeHeight, 0);
+    expect(session.reachable, isTrue);
+    expect(session.connecting, isTrue);
+    for (var i = 0; i < 100 && node.connections == connectionsBefore; i++) {
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+    }
+    // The answer is on its way to wallet2.
+    await Future<void>.delayed(const Duration(milliseconds: 500));
+    await session.refresh();
+    expect(session.nodeHeight, node.height);
+    expect(session.reachable, isTrue);
+    expect(session.connecting, isFalse);
+    await wallet.close();
+
+    // A node that is gone is unreachable, once it has had its time.
+    await node.close();
+    wallet = ViewWallet.openSaved()!;
+    session = WalletSession(wallet);
+    for (var i = 1; i < unansweredPolls; i++) {
+      await session.refresh();
+      expect(session.reachable, isTrue, reason: 'poll $i');
+      expect(session.connecting, isTrue, reason: 'poll $i');
+    }
+    await session.refresh();
+    expect(session.reachable, isFalse);
+    expect(session.connecting, isFalse);
+    expect(session.nodeHeight, 0);
   });
 
   test(
@@ -3135,6 +3248,32 @@ void main() {
     expect(find.text('50%'), findsOne);
     expect(find.text('250 of 500 blocks · from height 1000'), findsOne);
     await tester.pumpWidget(const SizedBox());
+
+    // A scan carried on after a launch: until the node has answered, how far
+    // there is to go isn't known, and that isn't "0 of 0 blocks".
+    final later = _OnNode(watch(full, restoreHeight: 1000), stagenetNode)
+      ..height = 1250
+      ..connecting = true;
+    await tester.pumpWidget(
+      MainApp(key: const Key('next launch'), home: HomeScreen(later)),
+    );
+    expect(find.text('Connecting to your node… · from height 1000'), findsOne);
+    expect(find.textContaining('0 of 0'), findsNothing);
+    expect(find.textContaining("Can't reach your node"), findsNothing);
+    later
+      ..connecting = false
+      ..reachable = false
+      ..dismissKeyImagesNotice();
+    await tester.pump();
+    expect(find.text('From height 1000'), findsOne);
+    expect(find.textContaining("Can't reach your node"), findsOne);
+    later
+      ..nodeHeight = 1500
+      ..reachable = true
+      ..dismissKeyImagesNotice();
+    await tester.pump();
+    expect(find.text('250 of 500 blocks · from height 1000'), findsOne);
+    await tester.pumpWidget(const SizedBox());
   });
 
   testWidgets('the first scan offers a way out, and setup says why it asks', (
@@ -3385,6 +3524,11 @@ class _OnNode extends WalletSession {
 
   @override
   final String? tor;
+
+  /// True for a node that hasn't answered the last polls, when a test says
+  /// so.
+  @override
+  bool connecting = false;
 }
 
 /// The lock screen up, as when the app locked while a sheet stayed above it.

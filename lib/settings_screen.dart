@@ -9,6 +9,7 @@ import 'node_screen.dart';
 import 'price.dart';
 import 'privacy_policy.dart';
 import 'session.dart';
+import 'tor.dart';
 import 'ui.dart';
 
 /// Screen 10 of the design: "Settings", with the parts built so far: the node,
@@ -130,6 +131,11 @@ class _NodeRowState extends State<_NodeRow> {
         : 'Your own node';
     final tor = s.tor == null ? '' : ' over Tor';
     final ms = _ms == null ? '' : ' · $_ms ms';
+    // Not yet an answer, which isn't the node failing: the app's Tor is
+    // still connecting, or the node is being asked.
+    final connecting =
+        s.connecting ||
+        (s.tor != null && !builtInTor.ready && builtInTor.error == null);
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: Material(
@@ -149,12 +155,18 @@ class _NodeRowState extends State<_NodeRow> {
                     children: [
                       Text(s.node, style: mono(size: 14)),
                       Text(
-                        s.reachable
+                        connecting
+                            ? '$kind$tor · connecting…'
+                            : s.reachable
                             ? '$kind$tor · connected$ms'
                             : "$kind$tor · can't reach it",
                         style: TextStyle(
                           fontSize: 12,
-                          color: s.reachable ? c.green : c.red,
+                          color: connecting
+                              ? c.amber
+                              : s.reachable
+                              ? c.green
+                              : c.red,
                         ),
                       ),
                     ],

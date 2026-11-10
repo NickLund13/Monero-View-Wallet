@@ -313,8 +313,11 @@ Windows test build has no camera, so setup there stays typed.
 ### 3. First sync ("Scanning the blockchain")
 
 - Large percentage, progress bar, "N of M blocks · from height H", and a
-  rough time left.
-- Card: received so far, outputs found, node with status dot.
+  rough time left. A scan carried on after a launch says "Connecting to your
+  node… · from height H" until the node has answered, and "From height H"
+  if it can't be reached.
+- Card: received so far, outputs found, node with status dot: green, amber
+  while connecting to the node or to Tor, red once the node can't be reached.
 - Note: spends appear after key images are imported; the app asks for them
   when the scan finishes.
 - Footer: "Keep the app open for the fastest scan.", and under it a red text
@@ -432,10 +435,15 @@ first" shows the node's height instead.
   - Synced: green dot, "Synced to block N · N min ago".
   - Catching up: amber dot, "Catching up · N blocks to go" and a thin
     progress bar. Right after launch, until the node has answered, the text
-    is "Connecting to your node…" over the saved balance.
+    is "Connecting to your node…" over the saved balance. It says the same
+    while a node that had answered is slow to answer again, as after the app
+    was in the background or the network changed.
   - Node unreachable: red dot and text, "Can't reach your node. Balance as of
     HH:MM." and a Change node link. The last known balance stays visible. A
     balance saved on an earlier day shows its date too: "8 Oct 2026, 09:05".
+    Only once the node has gone without an answer for about ten seconds, or
+    thirty over Tor: until then the app is still connecting, and red would
+    be a false alarm at every launch.
 - Key images notice when outputs arrived after the last import: one amber row,
   "N new outputs since your key images", an Import link, and a dismiss (×).
   Dismissing hides it until another new output arrives. Otherwise a quiet row,
@@ -483,7 +491,9 @@ first" shows the node's height instead.
 
 ### 10. Settings
 
-- Node: current node, status, latency (asked once when Settings opens) →
+- Node: current node, status ("connected" in green, "connecting…" in amber
+  while the node or Tor has yet to answer, "can't reach it" in red), latency
+  (asked once when Settings opens) →
   Choose a node. Below it the "Test speed asks every node" switch, on by
   default, kept in the encrypted wallet file.
 - Wallet: restore height; Advanced, with "Rescan, subaddress lookahead
