@@ -133,7 +133,8 @@ class _AdvancedScreenState extends State<AdvancedScreen> {
       final c = context.colors;
       final busy = _rescanning || _saving;
       final heightProblem = _heightProblem;
-      final canRescan = !busy && _s.reachable && heightProblem == null;
+      final canRescan =
+          !busy && _s.reachable && !_s.connecting && heightProblem == null;
       final lookahead = _lookahead;
       final current = _s.wallet.lookahead;
       return PopScope(
@@ -182,11 +183,14 @@ class _AdvancedScreenState extends State<AdvancedScreen> {
                         style: context.caption.copyWith(color: c.red),
                       ),
                     ),
-                  if (!_s.reachable)
+                  if (!_s.reachable || _s.connecting)
                     Padding(
                       padding: const EdgeInsets.only(top: 8),
                       child: Text(
-                        "Can't reach your node. Rescan when it answers.",
+                        _s.connecting
+                            ? 'Connecting to your node. Rescan when it '
+                                  'answers.'
+                            : "Can't reach your node. Rescan when it answers.",
                         style: context.caption,
                       ),
                     ),

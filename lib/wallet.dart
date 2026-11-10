@@ -70,6 +70,11 @@ bool onNetwork(Network network, int height, [DateTime? now]) =>
 
 const atomicUnitsPerXmr = 1000000000000;
 
+/// Blocks before a received output can be spent, and before a block reward
+/// can (Monero's CRYPTONOTE_MINED_MONEY_UNLOCK_WINDOW).
+const paymentUnlockBlocks = 10;
+const minedUnlockBlocks = 60;
+
 /// How far past the highest subaddress paid Receive hands out new ones. The
 /// Monero GUI watches 199 past it (a window of 200, [defaultLookahead]), but
 /// moves that window on only once a payment confirms, and checks a whole batch
@@ -180,6 +185,7 @@ class Transfer {
     this.account = 0,
     this.fee = 0,
     this.hash = '',
+    this.mined = false,
   });
   final bool incoming;
   final int amount;
@@ -187,6 +193,13 @@ class Transfer {
   /// 0 while the transaction is still unconfirmed.
   final int height;
   final int confirmations;
+
+  /// True for a block reward paid to the wallet, as mining pays, P2Pool
+  /// included.
+  final bool mined;
+
+  /// The confirmations before what it paid can be spent.
+  int get unlockBlocks => mined ? minedUnlockBlocks : paymentUnlockBlocks;
   final DateTime time;
 
   /// For a payment to the first account: the subaddresses it went to, 0
@@ -646,6 +659,7 @@ class ViewWallet {
           account: tx.subaddrAccount(),
           fee: tx.fee(),
           hash: tx.hash(),
+          mined: tx.isCoinbase(),
         ),
     ];
   }

@@ -80,8 +80,8 @@ class _TransactionScreenState extends State<TransactionScreen> {
           t.height == 0
               ? _words('None yet')
               : _number(
-                  t.confirmations < unlockBlocks
-                      ? '${t.confirmations} of $unlockBlocks'
+                  t.confirmations < t.unlockBlocks
+                      ? '${t.confirmations} of ${t.unlockBlocks}'
                       : _grouped(t.confirmations),
                 ),
         ),
