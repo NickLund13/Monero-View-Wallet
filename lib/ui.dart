@@ -453,6 +453,13 @@ String formatDate(DateTime d) => '${d.day} ${_months[d.month - 1]} ${d.year}';
 String formatTime(DateTime d) =>
     '${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
 
+/// "4 min", "2 h 5 min" or "3 h" for that many minutes.
+String minutesAndHours(int minutes) {
+  if (minutes < 60) return '$minutes min';
+  final rest = minutes % 60;
+  return '${minutes ~/ 60} h${rest == 0 ? '' : ' $rest min'}';
+}
+
 /// "1 output", "3 outputs"
 String plural(int n, String noun) => '$n $noun${n == 1 ? '' : 's'}';
 

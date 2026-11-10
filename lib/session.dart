@@ -28,6 +28,7 @@ const _importNote = 'mvw.lastImport';
 const _lockNote = 'mvw.lock';
 const _nameNote = 'mvw.name';
 const _speedNote = 'mvw.speedTest';
+const _noticeNote = 'mvw.noticeDismissed';
 
 /// What Last import says key images scanned by QR came from, in place of a
 /// file's name.
@@ -98,7 +99,9 @@ class WalletSession extends ChangeNotifier {
       lastImport = KeyImageImport.fromNote(wallet.remembered(_importNote)),
       lockOn = wallet.remembered(_lockNote) != 'off',
       testAllNodes = wallet.remembered(_speedNote) != 'picked',
-      _name = wallet.remembered(_nameNote) {
+      _name = wallet.remembered(_nameNote),
+      _noticeDismissedAt =
+          int.tryParse(wallet.remembered(_noticeNote) ?? '') ?? 0 {
     final contact = int.tryParse(wallet.remembered(_contactNote) ?? '');
     if (contact != null) {
       lastContact = lastBlock = DateTime.fromMillisecondsSinceEpoch(contact);
@@ -159,7 +162,11 @@ class WalletSession extends ChangeNotifier {
   /// True while [rescan] empties the wallet.
   bool rescanning = false;
   KeyImageImport? lastImport;
-  int _noticeDismissedAt = 0;
+
+  /// How many outputs lacked a key image when the person last dismissed the
+  /// notice on Home. Kept with the wallet, so the notice stays away after a
+  /// restart until another output arrives.
+  int _noticeDismissedAt;
 
   void _readWallet() {
     height = wallet.height;
@@ -182,6 +189,7 @@ class WalletSession extends ChangeNotifier {
       _lockNote: lockOn ? 'on' : 'off',
       _speedNote: testAllNodes ? 'all' : 'picked',
       _nameNote: _name ?? '',
+      _noticeNote: _noticeDismissedAt == 0 ? '' : '$_noticeDismissedAt',
     });
   }
 
@@ -232,6 +240,8 @@ class WalletSession extends ChangeNotifier {
   bool get canAddSubaddress =>
       wallet.subaddressCount - paidSubaddresses.fold(0, max) < receiveAhead;
 
+  /// Kept with the next save, which comes at the latest as the app goes to
+  /// the background.
   void dismissKeyImagesNotice() {
     _noticeDismissedAt = outputs.withoutKeyImage;
     notifyListeners();

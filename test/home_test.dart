@@ -16,6 +16,7 @@ import 'package:monero/src/wallet2.dart';
 import 'package:monero_view_wallet/home_screen.dart';
 import 'package:monero_view_wallet/main.dart';
 import 'package:monero_view_wallet/session.dart';
+import 'package:monero_view_wallet/ui.dart';
 import 'package:monero_view_wallet/wallet.dart';
 
 void main() {
@@ -124,6 +125,12 @@ void main() {
     expect(find.text('4 new outputs since your key images'), findsOne);
 
     await tester.pumpWidget(const SizedBox());
+  });
+
+  test('long waits read in hours', () {
+    expect(minutesAndHours(4), '4 min');
+    expect(minutesAndHours(60), '1 h');
+    expect(minutesAndHours(125), '2 h 5 min');
   });
 
   testWidgets('Home names the wallet as the person calls it', (tester) async {
